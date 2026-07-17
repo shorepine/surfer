@@ -82,9 +82,10 @@ verified: 60 fps windowed with all 12 controls animating
 (`SURF_AUTODRAG=1`), ~0.5 ms/tick compose headless.
 
 M2 done — **the bet passed on hardware.** p4 hal (`src/hal/p4/`): PPA
-fill/SRM/blend, single-buffer direct composition into the DSI scanout fb
-(the measured buffering verdict — see DESIGN.md §5.2 for all numbers),
-GT911 touch. `ports/esp32p4/` targets the ESP32-P4-Function-EV-Board
+fill/SRM/blend, triple-buffer-with-damage presentation — zero-copy DSI
+flip + DMA2D damage-forward, flicker-free (the measured buffering
+verdict — see DESIGN.md §5.2 for all numbers and rejected paths), GT911
+touch. `ports/esp32p4/` targets the ESP32-P4-Function-EV-Board
 (IDF ≥5.4, BSP `esp32_p4_function_ev_board_noglib`); boot runs a
 bandwidth/PPA benchmark, then the mixer demo. Measured under finger:
 62–66 fps, ~2.3 ms/tick. Key hardware rule learned: PPA ops cost

@@ -217,13 +217,21 @@ its own task, only `present`/PPA waits move, not callbacks.)
    lives in the assets, so kill it at bake time). Escape hatch: format is a
    hal-level property, so an RGB888 build stays possible for smaller panels.
 2. **Buffering on device** — DECIDED at M2 (measured on P4 + EK79007
-   1024×600): **single buffer, composite directly into the DSI scanout fb.**
-   Damage-copy present costs ~20 ms/full-screen because the PPA SRM engine
-   copies at only ~123 MB/s (r+w); fill and blend engines hit ~360 MB/s.
-   Direct composition ran the full-scene mixer at 10 ms/frame and a
-   single-finger drag at ~2.3 ms/frame (62–66 fps sustained under finger).
-   No visible tearing with dirty-rect-sized updates. Revisit only if a
-   full-screen animation shows tearing.
+   1024×600): **triple-buffer-with-damage.** Compose into a buffer that is
+   neither on glass nor pending, zero-copy flip via
+   `esp_lcd_panel_draw_bitmap` (an in-fb pointer just switches scanout at
+   the next frame boundary — track which buffer went live in the
+   refresh-done ISR), then DMA2D (`esp_async_fbcpy`) the last two frames'
+   damage forward into the new back buffer, skipping rects covered by the
+   current frame. Never stalls, and only fully-composed frames ever reach
+   the glass. Numbers: finger drag 63–66 fps at ~2 ms/tick (3.1 ms max);
+   pathological full-screen-every-frame animation 18 ms/tick (~55 fps).
+   Paths rejected by measurement: single-buffer direct composition is
+   fastest (10 ms full-scene) but visibly flickers — the panel catches
+   fill-then-blend mid-paint; double-buffer + SRM-copy present costs
+   ~20 ms/full-screen (SRM copies at only ~123 MB/s r+w vs ~360 MB/s for
+   fill/blend); double-buffer with a vsync fence stalls into the ~71 Hz
+   panel period and halves to 35 fps when compose+copy misses it.
 
    M2 also measured **PPA per-op overhead ≈ 70–200 µs regardless of size**
    (64×64 blend = 169 µs, of which ~half is setup). Consequence, now a

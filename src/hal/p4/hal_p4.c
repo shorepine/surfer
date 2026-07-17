@@ -7,20 +7,37 @@
 #include <string.h>
 
 #include "driver/ppa.h"
+#include "esp_async_fbcpy.h"  /* esp_lcd priv_include: DMA2D rect copy */
 #include "esp_cache.h"
 #include "esp_heap_caps.h"
+#include "esp_lcd_mipi_dsi.h"
+#include "esp_lcd_panel_ops.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+#include "hal/color_types.h"
 
 #include "hal_p4.h"
 
 /* P4 L2 cache line; alignment covers the hal's 64-byte contract too. */
 #define P4_ALIGN 128
 
+/* ≥ core's dirty-list cap (present never receives more rects than that) */
+#define SURF_MAX_DIRTY_P4 16
+
 static struct {
     surf_hal_p4_cfg      cfg;
-    uint16_t            *fb;       /* compose buffer, RGB565 */
+    uint16_t            *fb;       /* compose target = back buffer, RGB565 */
     size_t               fb_bytes;
+    int                  nfbs;     /* 0 headless-alloc, 1 direct, 3 flip */
+    int                  back;
+    volatile uint8_t     live;      /* buffer the DPI DMA latched last vsync */
+    uint8_t              last_flip; /* most recently flipped (newest frame) */
+    surf_rect            prev_r[SURF_MAX_DIRTY_P4];
+    int                  prev_n;
     ppa_client_handle_t  fill_cl, srm_cl, blend_cl;
+    esp_async_fbcpy_handle_t fbcpy;
+    SemaphoreHandle_t    fbcpy_sem;
     /* touch edge state */
     bool                 was_down;
     int16_t              last_x, last_y;
@@ -142,17 +159,96 @@ static void h_scale_blit(const surf_image *src, surf_rect src_r, surf_rect dst_r
     (void)src; (void)src_r; (void)dst_r;
 }
 
+static bool fbcpy_done(esp_async_fbcpy_handle_t mcp, esp_async_fbcpy_event_data_t *ev,
+                       void *arg)
+{
+    (void)mcp; (void)ev;
+    BaseType_t hp = pdFALSE;
+    xSemaphoreGiveFromISR((SemaphoreHandle_t)arg, &hp);
+    return hp == pdTRUE;
+}
+
+/* The end-of-frame ISR is when the DPI DMA latches the most recently
+ * flipped buffer; recording it tells present which buffer is on glass. */
+static bool vsync_cb(esp_lcd_panel_handle_t panel, esp_lcd_dpi_panel_event_data_t *ev,
+                     void *arg)
+{
+    (void)panel; (void)ev; (void)arg;
+    S.live = S.last_flip;
+    return false;
+}
+
+static void fwd_copy(int src_fb, int dst_fb, surf_rect r)
+{
+    esp_async_fbcpy_trans_desc_t t = {
+        .src_buffer = S.cfg.scan_fbs[src_fb],
+        .dst_buffer = S.cfg.scan_fbs[dst_fb],
+        .src_buffer_size_x = (size_t)S.cfg.w,
+        .src_buffer_size_y = (size_t)S.cfg.h,
+        .dst_buffer_size_x = (size_t)S.cfg.w,
+        .dst_buffer_size_y = (size_t)S.cfg.h,
+        .src_offset_x = (size_t)r.x,
+        .src_offset_y = (size_t)r.y,
+        .dst_offset_x = (size_t)r.x,
+        .dst_offset_y = (size_t)r.y,
+        .copy_size_x = (size_t)r.w,
+        .copy_size_y = (size_t)r.h,
+        .pixel_format_unique_id = {
+            .color_type_id = COLOR_TYPE_ID(COLOR_SPACE_RGB, COLOR_PIXEL_RGB565),
+        },
+    };
+    if (esp_async_fbcpy(S.fbcpy, &t, fbcpy_done, S.fbcpy_sem) == ESP_OK)
+        xSemaphoreTake(S.fbcpy_sem, portMAX_DELAY);
+}
+
+/* Flip to the buffer we just composed (draw_bitmap with an in-fb pointer is
+ * a zero-copy scanout switch that latches at the next frame boundary),
+ * then rotate to a buffer that is neither on glass nor pending — with
+ * three buffers one always exists, so present never blocks. The new back
+ * holds a frame that is two flips old: DMA2D the previous and current
+ * damage forward from the newest frame before returning. */
 static void h_present(const surf_rect *dirty, int n)
 {
-    if (!S.cfg.scan_fb || S.cfg.single_buffer)
+    if (S.nfbs < 3 || n == 0)
         return;
-    surf_image fb_img = {
-        .pixels = S.fb, .w = S.cfg.w, .h = S.cfg.h,
-        .stride = S.cfg.w * 2, .format = SURF_FMT_RGB565, .opaque = true,
-    };
+
+    int miny = S.cfg.h, maxy = 0;
+    for (int i = 0; i < n; i++) {
+        if (dirty[i].y < miny) miny = dirty[i].y;
+        if (dirty[i].y + dirty[i].h > maxy) maxy = dirty[i].y + dirty[i].h;
+    }
+    esp_lcd_panel_draw_bitmap(S.cfg.panel, 0, miny, S.cfg.w, maxy,
+                              S.cfg.scan_fbs[S.back]);
+    S.last_flip = (uint8_t)S.back;
+
+    uint8_t live = S.live;  /* snapshot: the ISR may update it under us */
+    int newest = S.back;
+    for (int i = 0; i < 3; i++) {
+        if (i != live && i != newest) {
+            S.back = i;
+            break;
+        }
+    }
+    S.fb = S.cfg.scan_fbs[S.back];
+
+    /* previous-frame damage already inside this frame's rects is about to
+     * be copied anyway — steady-state animation makes that the whole list */
+    for (int i = 0; i < S.prev_n; i++) {
+        const surf_rect p = S.prev_r[i];
+        bool covered = false;
+        for (int j = 0; j < n && !covered; j++)
+            covered = dirty[j].x <= p.x && dirty[j].y <= p.y &&
+                      dirty[j].x + dirty[j].w >= p.x + p.w &&
+                      dirty[j].y + dirty[j].h >= p.y + p.h;
+        if (!covered)
+            fwd_copy(newest, S.back, p);
+    }
     for (int i = 0; i < n; i++)
-        srm_copy(&fb_img, dirty[i], S.cfg.scan_fb, (size_t)S.cfg.w * S.cfg.h * 2,
-                 S.cfg.w, S.cfg.h, (surf_point){dirty[i].x, dirty[i].y});
+        fwd_copy(newest, S.back, dirty[i]);
+
+    S.prev_n = n < SURF_MAX_DIRTY_P4 ? n : SURF_MAX_DIRTY_P4;
+    for (int i = 0; i < S.prev_n; i++)
+        S.prev_r[i] = dirty[i];
 }
 
 static void h_wait_idle(void)
@@ -243,14 +339,28 @@ const surf_hal *surf_hal_p4_init(const surf_hal_p4_cfg *cfg)
         return NULL;
     S.cfg = *cfg;
     S.fb_bytes = (size_t)cfg->w * cfg->h * 2;
-    if (cfg->single_buffer && cfg->scan_fb) {
-        S.fb = cfg->scan_fb;
-    } else {
+    if (!cfg->scan_fbs[0]) {  /* headless bench */
+        S.nfbs = 0;
         S.fb = h_alloc_image(S.fb_bytes);
         if (!S.fb)
             return NULL;
         memset(S.fb, 0, S.fb_bytes);
         surf_hal_p4_sync(S.fb, S.fb_bytes);
+    } else if (cfg->single_buffer || !cfg->scan_fbs[1] || !cfg->scan_fbs[2]) {
+        S.nfbs = 1;
+        S.fb = cfg->scan_fbs[0];
+    } else {
+        S.nfbs = 3;
+        S.live = 0;  /* DSI starts scanning fbs[0] */
+        S.last_flip = 0;
+        S.back = 1;
+        S.fb = cfg->scan_fbs[1];
+        if (esp_async_fbcpy_install(&(esp_async_fbcpy_config_t){}, &S.fbcpy) != ESP_OK)
+            return NULL;
+        S.fbcpy_sem = xSemaphoreCreateBinary();
+        esp_lcd_dpi_panel_event_callbacks_t cbs = {.on_refresh_done = vsync_cb};
+        if (esp_lcd_dpi_panel_register_event_callbacks(cfg->panel, &cbs, NULL) != ESP_OK)
+            return NULL;
     }
 
     ppa_client_config_t fill_c = {.oper_type = PPA_OPERATION_FILL};

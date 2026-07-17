@@ -11,13 +11,16 @@
 typedef bool (*surf_p4_touch_poll_fn)(int16_t *x, int16_t *y);
 
 typedef struct {
-    esp_lcd_panel_handle_t panel;    /* NULL → headless (bench only) */
-    void                  *scan_fb;  /* DSI scanout framebuffer, RGB565 */
+    esp_lcd_panel_handle_t panel;        /* NULL → headless (bench only) */
+    void                  *scan_fbs[3];  /* DSI framebuffers, RGB565 */
     int16_t                w, h;
-    surf_p4_touch_poll_fn  touch_poll;  /* optional */
-    /* true: composite straight into scan_fb, present is free (tear risk on
-     * large updates); false: separate compose fb + damage copy on present.
-     * The M2 buffering benchmark — measure both (DESIGN.md §2.3). */
+    surf_p4_touch_poll_fn  touch_poll;   /* optional */
+    /* With all three scan_fbs set: triple-buffer-with-damage — compose into
+     * a buffer that is neither scanned nor pending, zero-copy flip on
+     * present (never stalls), DMA2D the last two frames' damage forward.
+     * Flicker-free at full compose rate. single_buffer forces direct
+     * composition into scan_fbs[0]: present is free but mid-paint states
+     * are visible on large updates (kept for A/B measurement). */
     bool                   single_buffer;
 } surf_hal_p4_cfg;
 

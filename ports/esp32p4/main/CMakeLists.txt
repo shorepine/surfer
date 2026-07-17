@@ -18,6 +18,8 @@ idf_component_register(
         ${SURFER_ROOT}/src/core
         ${SURFER_ROOT}/src/hal/p4
         ${CMAKE_CURRENT_BINARY_DIR}/gen
+        # esp_async_fbcpy (DMA2D rect copy) ships in esp_lcd's priv_include
+        $ENV{IDF_PATH}/components/esp_lcd/priv_include
     PRIV_REQUIRES
         esp_driver_ppa esp_lcd esp_timer esp_mm heap espressif__esp_lcd_touch
 )

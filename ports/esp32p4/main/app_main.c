@@ -222,8 +222,9 @@ void app_main(void)
         return;
     }
     bsp_display_backlight_on();
-    void *scan_fb = NULL;
-    ESP_ERROR_CHECK(esp_lcd_dpi_panel_get_frame_buffer(panel, 1, &scan_fb));
+    void *scan_fb0 = NULL, *scan_fb1 = NULL, *scan_fb2 = NULL;
+    ESP_ERROR_CHECK(
+        esp_lcd_dpi_panel_get_frame_buffer(panel, 3, &scan_fb0, &scan_fb1, &scan_fb2));
 
     /* bring-up sanity: CPU color bars via the official draw path */
     {
@@ -244,10 +245,9 @@ void app_main(void)
     }
 
     surf_hal_p4_cfg cfg = {
-        .panel = panel, .scan_fb = scan_fb, .w = LCD_W, .h = LCD_H,
+        .panel = panel, .scan_fbs = {scan_fb0, scan_fb1, scan_fb2},
+        .w = LCD_W, .h = LCD_H,
         .touch_poll = touch_poll,
-        .single_buffer = true,  /* M2 verdict: damage-copy present costs
-                                   ~20 ms full-screen on the slow SRM path */
     };
     const surf_hal *hal = surf_hal_p4_init(&cfg);
     ESP_ERROR_CHECK(hal ? ESP_OK : ESP_FAIL);
@@ -327,7 +327,7 @@ void app_main(void)
             win_start = now;
         }
 
-        /* pace to ~60 Hz: sleep off the remainder of a 16.6 ms budget */
+        /* triple-buffered present never blocks; pace the loop to ~60 Hz */
         int64_t budget_ms = (16667 - dt) / 1000;
         vTaskDelay(pdMS_TO_TICKS(budget_ms < 1 ? 1 : budget_ms));
     }
