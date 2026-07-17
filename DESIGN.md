@@ -248,5 +248,5 @@ its own task, only `present`/PPA waits move, not callbacks.)
 4. **Does `scale_blit` make v1?** PPA does scaling/rotation nearly free; SDL
    too. Tempting for zoom transitions, but cut from v1 frame path to keep the
    compositor simple — the hal op exists, nothing uses it yet.
-5. **License.** Everything here can be MIT (stb is public domain/MIT). Decide
-   before first public push.
+5. **License.** DECIDED: MIT (stb is public domain/MIT), chosen at first
+   public push.
