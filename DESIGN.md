@@ -216,8 +216,22 @@ its own task, only `present`/PPA waits move, not callbacks.)
    the surfpack baker for large soft gradients (the metal-knob banding risk
    lives in the assets, so kill it at bake time). Escape hatch: format is a
    hal-level property, so an RGB888 build stays possible for smaller panels.
-2. **Buffering on device** — decided empirically at M2, both paths sketched
-   above.
+2. **Buffering on device** — DECIDED at M2 (measured on P4 + EK79007
+   1024×600): **single buffer, composite directly into the DSI scanout fb.**
+   Damage-copy present costs ~20 ms/full-screen because the PPA SRM engine
+   copies at only ~123 MB/s (r+w); fill and blend engines hit ~360 MB/s.
+   Direct composition ran the full-scene mixer at 10 ms/frame and a
+   single-finger drag at ~2.3 ms/frame (62–66 fps sustained under finger).
+   No visible tearing with dirty-rect-sized updates. Revisit only if a
+   full-screen animation shows tearing.
+
+   M2 also measured **PPA per-op overhead ≈ 70–200 µs regardless of size**
+   (64×64 blend = 169 µs, of which ~half is setup). Consequence, now a
+   design rule: assets that can be baked at final size are baked at final
+   size (one blit); tiled 9-patch stretching is for cold paths only — a
+   36×36 track tiled to 48×330 was ~110 ops ≈ 12 ms, the baked equivalent
+   is 1 op. Full-frame 1080p ops measured 11–67 ms — full-frame redraw is
+   as impossible as §1 predicted; CPU PSRAM writes ~87 MB/s.
 3. **Filmstrip frame count vs memory.** 128 frames × 96×96 × ARGB8888 ≈ 4.7 MB
    per knob style — too fat. Options: 64 frames + nearest-frame (audio
    hardware convention, imperceptible), 96×96 RGB565+A8 (~2.3 MB), or

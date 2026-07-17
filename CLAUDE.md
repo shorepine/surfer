@@ -79,6 +79,17 @@ default, angular optional) and slider, written against `surfer.h` only.
 `build/surfer_demo`, plus the M0 bounce demo → `build/surfer_bounce`;
 placeholder art baked by `tools/gen_widget_assets.py`. Acceptance
 verified: 60 fps windowed with all 12 controls animating
-(`SURF_AUTODRAG=1`), ~0.5 ms/tick compose headless. Next milestone:
-**M2** (see DESIGN.md §4) — p4 hal backend (PPA, 2D-DMA, DSI present,
-buffering benchmark on hardware); do not build past it until it passes.
+(`SURF_AUTODRAG=1`), ~0.5 ms/tick compose headless.
+
+M2 done — **the bet passed on hardware.** p4 hal (`src/hal/p4/`): PPA
+fill/SRM/blend, single-buffer direct composition into the DSI scanout fb
+(the measured buffering verdict — see DESIGN.md §5.2 for all numbers),
+GT911 touch. `ports/esp32p4/` targets the ESP32-P4-Function-EV-Board
+(IDF ≥5.4, BSP `esp32_p4_function_ev_board_noglib`); boot runs a
+bandwidth/PPA benchmark, then the mixer demo. Measured under finger:
+62–66 fps, ~2.3 ms/tick. Key hardware rule learned: PPA ops cost
+~70–200 µs each regardless of size → bake assets at final size (the
+slider uses a sprite track when style art matches exactly; tiled 9-patch
+is the fallback). Flash: `idf.py -p <port> flash` from `ports/esp32p4/`.
+Next milestone: **M3** (see DESIGN.md §4) — text: surfpack font baking,
+label, wrap, textinput + caret.

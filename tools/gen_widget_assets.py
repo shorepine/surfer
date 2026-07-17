@@ -12,6 +12,7 @@ KNOB_FRAMES = 64
 KNOB = 64
 TRACK = 36
 TRACK_INSET = 12
+TRACKFULL_W, TRACKFULL_H = 48, 330  # baked at the mixer's exact size: 1 blit
 CAP_W, CAP_H = 40, 20
 
 
@@ -72,19 +73,19 @@ def rounded_alpha(px, py, w, h, radius):
     return d, max(0.0, min(1.0, 0.5 - d))
 
 
-def track():
+def track(w, h):
     out = []
-    for y in range(TRACK):
-        for x in range(TRACK):
+    for y in range(h):
+        for x in range(w):
             px, py = x + 0.5, y + 0.5
-            d, a = rounded_alpha(px, py, TRACK, TRACK, 8)
+            d, a = rounded_alpha(px, py, w, h, 8)
             if a == 0.0:
                 out.append(0)
                 continue
             col = (54, 58, 68)
             if d > -1.8:
                 col = (84, 90, 104)
-            groove = max(0.0, min(1.0, 5.5 - abs(px - TRACK / 2.0)))
+            groove = max(0.0, min(1.0, 5.5 - abs(px - w / 2.0)))
             col = mix(col, (32, 35, 42), groove)
             out.append((clamp(a * 255) << 24) | (col[0] << 16) | (col[1] << 8) | col[2])
     return out
@@ -111,7 +112,8 @@ def cap():
 
 
 def emit(name, values, per_line=12):
-    print(f"static uint32_t {name}[{len(values)}] = {{")
+    # const → flash .rodata on device; RAM can't hold the big strips
+    print(f"static const uint32_t {name}[{len(values)}] = {{")
     for i in range(0, len(values), per_line):
         print("    " + ", ".join(f"0x{v:x}" for v in values[i:i + per_line]) + ",")
     print("};")
@@ -124,10 +126,13 @@ def main():
     print(f"#define WKNOB_STRIP_W {KNOB * KNOB_FRAMES}")
     print(f"#define WTRACK_SIZE {TRACK}")
     print(f"#define WTRACK_INSET {TRACK_INSET}")
+    print(f"#define WTRACKFULL_W {TRACKFULL_W}")
+    print(f"#define WTRACKFULL_H {TRACKFULL_H}")
     print(f"#define WCAP_W {CAP_W}")
     print(f"#define WCAP_H {CAP_H}")
     emit("widget_knob_px", knob_strip())
-    emit("widget_track_px", track())
+    emit("widget_track_px", track(TRACK, TRACK))
+    emit("widget_trackfull_px", track(TRACKFULL_W, TRACKFULL_H))
     emit("widget_cap_px", cap())
 
 

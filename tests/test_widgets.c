@@ -179,6 +179,15 @@ static void test_slider(void)
     OK(surf_slider_value(s) == SURF_ONE / 4 && change_count == 2);
 
     surf_slider_destroy(s);
+
+    /* exact-size track art becomes a single sprite, not a tiled 9-patch */
+    OK(surf_slider_node(NULL) == NULL);
+    static surf_image exact_img = {.pixels = (void *)&exact_img, .w = 20, .h = 100,
+                                   .stride = 80, .format = SURF_FMT_ARGB8888};
+    surf_slider_style est = {.track = &exact_img, .inset = 12, .cap = &cap_img};
+    surf_slider *e = surf_slider_new(surf_screen(), 50, 10, 20, 100, &est);
+    OK(e && surf_slider_node(e)->first->type == SURF_NODE_SPRITE);
+    surf_slider_destroy(e);
 }
 
 static surf_image knobstrip_img = {

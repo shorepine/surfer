@@ -66,8 +66,14 @@ surf_slider *surf_slider_new(surf_node *parent, int16_t x, int16_t y,
     s->cap_h = style->cap->h;
 
     s->root = surf_group_new(x, y);
-    s->track = surf_ninepatch_new(style->track, 0, 0, w, h,
-                                  style->inset, style->inset, style->inset, style->inset);
+    /* Exact-size track art is one blit; the tiled 9-patch is the fallback
+     * for sizes the theme didn't bake. On the P4 the per-op cost of tiling
+     * dwarfs the pixels (M2 bench), so themes should ship exact sizes. */
+    if (style->track->w == w && style->track->h == h)
+        s->track = surf_sprite_new(style->track, 0, 0);
+    else
+        s->track = surf_ninepatch_new(style->track, 0, 0, w, h, style->inset,
+                                      style->inset, style->inset, style->inset);
     s->cap = surf_sprite_new(style->cap, 0, 0);
     if (!s->root || !s->track || !s->cap) {
         surf_node_destroy(s->root);

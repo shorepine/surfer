@@ -57,11 +57,11 @@ int main(int argc, char **argv)
     }
 
     surf_image balls_img = {
-        .pixels = bounce_balls_px, .w = BOUNCE_STRIP_W, .h = BOUNCE_STRIP_H,
+        .pixels = (void *)bounce_balls_px, .w = BOUNCE_STRIP_W, .h = BOUNCE_STRIP_H,
         .stride = BOUNCE_STRIP_W * 4, .format = SURF_FMT_ARGB8888, .opaque = false,
     };
     surf_image tile_img = {
-        .pixels = bounce_tile_px, .w = BOUNCE_TILE_SIZE, .h = BOUNCE_TILE_SIZE,
+        .pixels = (void *)bounce_tile_px, .w = BOUNCE_TILE_SIZE, .h = BOUNCE_TILE_SIZE,
         .stride = BOUNCE_TILE_SIZE * 2, .format = SURF_FMT_RGB565, .opaque = true,
     };
 

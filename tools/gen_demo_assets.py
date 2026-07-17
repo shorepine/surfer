@@ -62,7 +62,8 @@ def tile():
 
 
 def emit(name, ctype, values, per_line=12):
-    print(f"static {ctype} {name}[{len(values)}] = {{")
+    # const → flash .rodata on device; RAM can't hold the big strips
+    print(f"static const {ctype} {name}[{len(values)}] = {{")
     for i in range(0, len(values), per_line):
         row = ", ".join(f"0x{v:x}" for v in values[i:i + per_line])
         print(f"    {row},")

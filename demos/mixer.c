@@ -37,15 +37,15 @@ int main(int argc, char **argv)
     }
 
     surf_image knob_img = {
-        .pixels = widget_knob_px, .w = WKNOB_STRIP_W, .h = WKNOB_SIZE,
+        .pixels = (void *)widget_knob_px, .w = WKNOB_STRIP_W, .h = WKNOB_SIZE,
         .stride = WKNOB_STRIP_W * 4, .format = SURF_FMT_ARGB8888, .opaque = false,
     };
     surf_image track_img = {
-        .pixels = widget_track_px, .w = WTRACK_SIZE, .h = WTRACK_SIZE,
-        .stride = WTRACK_SIZE * 4, .format = SURF_FMT_ARGB8888, .opaque = false,
+        .pixels = (void *)widget_trackfull_px, .w = WTRACKFULL_W, .h = WTRACKFULL_H,
+        .stride = WTRACKFULL_W * 4, .format = SURF_FMT_ARGB8888, .opaque = false,
     };
     surf_image cap_img = {
-        .pixels = widget_cap_px, .w = WCAP_W, .h = WCAP_H,
+        .pixels = (void *)widget_cap_px, .w = WCAP_W, .h = WCAP_H,
         .stride = WCAP_W * 4, .format = SURF_FMT_ARGB8888, .opaque = false,
     };
     surf_knob_style kstyle = {
@@ -64,7 +64,8 @@ int main(int argc, char **argv)
     for (int i = 0; i < N; i++) {
         int16_t kx = (int16_t)(158 + i * 180);
         knobs[i] = surf_knob_new(surf_screen(), kx, 100, &kstyle);
-        sliders[i] = surf_slider_new(surf_screen(), (int16_t)(kx + 8), 240, 48, 360, &sstyle);
+        sliders[i] = surf_slider_new(surf_screen(), (int16_t)(kx + 8), 240,
+                                     WTRACKFULL_W, WTRACKFULL_H, &sstyle);
 
         kbar[i] = surf_rect_new(kx, 28, 1, 8, SURF_RGB(240, 190, 80));
         sbar[i] = surf_rect_new(kx, (int16_t)(H - 40), 1, 8, SURF_RGB(80, 200, 220));
