@@ -13,11 +13,18 @@ enum {
     SURF_NODE_SPRITE,
     SURF_NODE_FILMSTRIP,
     SURF_NODE_NINEPATCH,
+    SURF_NODE_TEXT,
+    SURF_NODE_TEXTINPUT,
 };
 
 enum {
     SURF_NF_HIDDEN = 1u << 0,
     SURF_NF_CLIP   = 1u << 1,
+    SURF_NF_FOCUS  = 1u << 2,  /* textinput: draw the caret */
+};
+
+enum {
+    SURF_TF_ELLIPSIS = 1u << 0,
 };
 
 struct surf_node {
@@ -42,6 +49,21 @@ struct surf_node {
             const surf_image *img;
             int16_t l, t, r, b;  /* insets; node w/h are the dst size */
         } nine;
+        struct {
+            const surf_font *font;
+            char      *str;      /* owned (malloc); NULL = "" */
+            int16_t    wrap_w;
+            uint8_t    align, tflags;
+            surf_image img;      /* atlas header copy; tint = text color */
+        } text;
+        struct {
+            const surf_font *font;
+            char      *buf;      /* owned; always NUL-terminated */
+            int32_t    len, cap;
+            int32_t    caret, anchor;  /* byte idx; selection = [min..max) */
+            int16_t    scroll_x;
+            surf_image img;      /* atlas header copy; tint = text color */
+        } input;
     } u;
 };
 
@@ -87,9 +109,45 @@ extern surf_ctx surf_g;
 
 void surf_input_dispatch(const surf_touch *t);
 
+surf_node *surf_node_alloc(uint8_t type);  /* pool; NULL when exhausted */
 bool      surf_node_attached(const surf_node *n);
 surf_rect surf_node_subtree_bounds(const surf_node *n, int16_t px, int16_t py);
 void      surf_damage_subtree(const surf_node *n);
 void      surf_compose(void);  /* compose all dirty rects + present */
+
+/* src/text/: layout walker shared by measure, paint, and caret math */
+typedef struct {
+    const surf_font *f;
+    const char      *s;
+    int16_t          wrap_w;
+    uint8_t          align, tflags;
+    int32_t          i;           /* byte cursor within the current line */
+    int32_t          line_end;    /* render end of the current line */
+    int32_t          next_start;  /* start of the next line; -1 = last */
+    int16_t          pen_x, base_y;
+    uint32_t         prev_cp;     /* kerning state; 0 at line start */
+    uint8_t          ell;         /* ellipsize: 0 off, 1 pending, 2 done */
+} surf_tlayout;
+
+typedef struct {
+    const surf_glyph *g;
+    int16_t x, y;       /* glyph blit position (top-left), node-relative */
+    int32_t byte_idx;   /* index of this codepoint in the string */
+} surf_tglyph;
+
+uint32_t surf_utf8_next(const char *s, int32_t *i);   /* 0 at NUL */
+int32_t  surf_utf8_prev(const char *s, int32_t i);
+const surf_glyph *surf_font_glyph(const surf_font *f, uint32_t cp);
+int16_t  surf_font_kern(const surf_font *f, uint32_t a, uint32_t b);
+
+void surf_tlayout_begin(surf_tlayout *it, const surf_font *f, const char *s,
+                        int16_t wrap_w, uint8_t align, uint8_t tflags);
+bool surf_tlayout_next(surf_tlayout *it, surf_tglyph *out);
+
+void surf_glyph_blit(const surf_image *img, const surf_glyph *g,
+                     int16_t dx, int16_t dy, surf_rect vis);
+void surf_text_paint(const surf_paint_ent *e);       /* label */
+void surf_textinput_paint(const surf_paint_ent *e);
+void surf_text_free_storage(surf_node *n);           /* both text types */
 
 #endif /* SURF_INTERNAL_H */

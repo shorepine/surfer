@@ -4,7 +4,7 @@ CC      ?= cc
 CFLAGS  ?= -O2 -g
 CFLAGS  += -std=c11 -Wall -Wextra -Iinclude
 
-CORE_SRCS   := $(wildcard src/core/*.c)
+CORE_SRCS   := $(wildcard src/core/*.c) $(wildcard src/text/*.c)
 WIDGET_SRCS := $(wildcard src/widgets/*.c)
 SDL_SRCS    := $(wildcard src/hal/sdl/*.c)
 HDRS        := include/surfer.h src/core/surf_internal.h src/hal/sdl/hal_sdl.h
@@ -16,7 +16,7 @@ GEN_DIR := build/gen
 
 .PHONY: sdl test clean
 
-sdl: build/surfer_demo build/surfer_bounce
+sdl: build/surfer_demo build/surfer_type build/surfer_bounce
 
 test: build/surfer_test
 	./build/surfer_test
@@ -29,12 +29,30 @@ $(GEN_DIR)/widget_assets.h: tools/gen_widget_assets.py
 	@mkdir -p $(GEN_DIR)
 	python3 tools/gen_widget_assets.py > $@
 
-# the "desktop demo" tracks the current milestone: M1 mixer
+build/tools/fontbake: tools/fontbake.c tools/stb/stb_truetype.h
+	@mkdir -p build/tools
+	$(CC) -O2 -Itools -o $@ tools/fontbake.c -lm
+
+$(GEN_DIR)/font_ui16.h: build/tools/fontbake assets/fonts/Roboto-Regular.ttf
+	@mkdir -p $(GEN_DIR)
+	build/tools/fontbake ui16 16 assets/fonts/Roboto-Regular.ttf $@
+
+$(GEN_DIR)/font_ui28.h: build/tools/fontbake assets/fonts/Roboto-Regular.ttf
+	@mkdir -p $(GEN_DIR)
+	build/tools/fontbake ui28 28 assets/fonts/Roboto-Regular.ttf $@
+
+# the "desktop demo" tracks the current milestone: mixer (M1) + text labels (M3)
 build/surfer_demo: $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) demos/mixer.c \
-		$(GEN_DIR)/widget_assets.h $(HDRS)
+		$(GEN_DIR)/widget_assets.h $(GEN_DIR)/font_ui16.h $(GEN_DIR)/font_ui28.h $(HDRS)
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -I$(GEN_DIR) \
 		-o $@ $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) demos/mixer.c $(SDL_LIBS) -lm
+
+build/surfer_type: $(CORE_SRCS) $(SDL_SRCS) demos/type.c \
+		$(GEN_DIR)/font_ui16.h $(GEN_DIR)/font_ui28.h $(HDRS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -I$(GEN_DIR) \
+		-o $@ $(CORE_SRCS) $(SDL_SRCS) demos/type.c $(SDL_LIBS) -lm
 
 build/surfer_bounce: $(CORE_SRCS) $(SDL_SRCS) demos/bounce.c \
 		$(GEN_DIR)/bounce_assets.h $(HDRS)
@@ -42,12 +60,12 @@ build/surfer_bounce: $(CORE_SRCS) $(SDL_SRCS) demos/bounce.c \
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -I$(GEN_DIR) \
 		-o $@ $(CORE_SRCS) $(SDL_SRCS) demos/bounce.c $(SDL_LIBS)
 
-build/surfer_test: $(CORE_SRCS) $(WIDGET_SRCS) tests/test_core.c tests/test_widgets.c \
-		tests/mock_hal.c tests/mock_hal.h $(HDRS)
+TEST_SRCS := $(wildcard tests/*.c)
+
+build/surfer_test: $(CORE_SRCS) $(WIDGET_SRCS) $(TEST_SRCS) tests/mock_hal.h $(HDRS)
 	@mkdir -p build
 	$(CC) $(CFLAGS) -Isrc/core -Itests \
-		-o $@ $(CORE_SRCS) $(WIDGET_SRCS) tests/test_core.c tests/test_widgets.c \
-		tests/mock_hal.c -lm
+		-o $@ $(CORE_SRCS) $(WIDGET_SRCS) $(TEST_SRCS) -lm
 
 clean:
 	rm -rf build

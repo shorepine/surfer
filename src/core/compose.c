@@ -127,6 +127,12 @@ static void paint(const surf_paint_ent *e)
     case SURF_NODE_NINEPATCH:
         paint_ninepatch(e);
         return;
+    case SURF_NODE_TEXT:
+        surf_text_paint(e);
+        return;
+    case SURF_NODE_TEXTINPUT:
+        surf_textinput_paint(e);
+        return;
     }
 }
 

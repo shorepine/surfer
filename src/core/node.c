@@ -7,7 +7,7 @@ surf_ctx surf_g;
 
 /* ---- pool ---- */
 
-static surf_node *node_alloc(uint8_t type)
+surf_node *surf_node_alloc(uint8_t type)
 {
     surf_node *n = surf_g.free_list;
     if (!n)
@@ -17,6 +17,7 @@ static surf_node *node_alloc(uint8_t type)
     n->type = type;
     return n;
 }
+#define node_alloc surf_node_alloc
 
 static void node_free(surf_node *n)
 {
@@ -221,6 +222,7 @@ static void destroy_children(surf_node *n)
     while (c) {
         surf_node *next = c->next;
         destroy_children(c);
+        surf_text_free_storage(c);
         node_free(c);
         c = next;
     }
@@ -233,6 +235,7 @@ void surf_node_destroy(surf_node *n)
         return;
     surf_node_detach(n);
     destroy_children(n);
+    surf_text_free_storage(n);
     node_free(n);
 }
 

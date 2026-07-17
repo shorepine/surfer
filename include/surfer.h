@@ -22,14 +22,16 @@ typedef uint16_t surf_color;
 typedef enum {
     SURF_FMT_RGB565   = 0,
     SURF_FMT_ARGB8888 = 1,
+    SURF_FMT_A8       = 2,  /* alpha-only (glyph atlases); tinted on blend */
 } surf_format;
 
 typedef struct {
-    void    *pixels;
-    int16_t  w, h;
-    int32_t  stride;  /* bytes per row; must be a 64-byte multiple on device */
-    uint8_t  format;  /* surf_format */
-    bool     opaque;  /* no alpha content: compositor may use blit, not blend */
+    void      *pixels;
+    int16_t    w, h;
+    int32_t    stride;  /* bytes per row; must be a 64-byte multiple on device */
+    uint8_t    format;  /* surf_format */
+    bool       opaque;  /* no alpha content: compositor may use blit, not blend */
+    surf_color tint;    /* A8 only: the color the alpha modulates */
 } surf_image;
 
 typedef enum {
@@ -104,6 +106,63 @@ void surf_ninepatch_set_size(surf_node *n, int16_t w, int16_t h);
 surf_node *surf_hit_test(int16_t x, int16_t y);
 void surf_node_set_on_touch(surf_node *n, surf_touch_cb cb, void *user);
 void surf_node_abs_pos(const surf_node *n, int16_t *x, int16_t *y);
+
+/* ---- text: atlases baked at build time by tools/fontbake.c ---- */
+
+typedef struct {
+    uint32_t cp;
+    int16_t  x, y, w, h;   /* atlas rect */
+    int16_t  xoff, yoff;   /* bearing from the pen position */
+    int16_t  adv;
+} surf_glyph;
+
+typedef struct { uint32_t a, b; int16_t adv; } surf_kern;
+
+typedef struct {
+    surf_image        atlas;   /* SURF_FMT_A8 */
+    int16_t           ascent, descent, line_gap;  /* px; descent ≤ 0 */
+    const surf_glyph *glyphs;  /* sorted by codepoint */
+    int32_t           nglyphs;
+    const surf_kern  *kerns;   /* sorted by (a, b); only non-zero pairs */
+    int32_t           nkerns;
+} surf_font;
+
+#define surf_font_line_h(f) ((int16_t)((f)->ascent - (f)->descent + (f)->line_gap))
+
+typedef enum {
+    SURF_ALIGN_LEFT   = 0,
+    SURF_ALIGN_CENTER = 1,
+    SURF_ALIGN_RIGHT  = 2,
+} surf_align;
+
+surf_point surf_text_measure(const surf_font *f, const char *str, int16_t wrap_w);
+
+/* label node: wrap at wrap_w (0 = single line), greedy break on space and
+ * hyphen; ellipsize truncates a single line with U+2026 instead */
+surf_node *surf_text_new(const surf_font *f, const char *str,
+                         int16_t x, int16_t y, surf_color c);
+void surf_text_set(surf_node *n, const char *str);
+void surf_text_set_color(surf_node *n, surf_color c);
+void surf_text_set_wrap(surf_node *n, int16_t wrap_w);
+void surf_text_set_align(surf_node *n, surf_align a);
+void surf_text_set_ellipsis(surf_node *n, bool on);
+
+/* textinput node: single-line editable text + caret/selection state.
+ * Indices are byte offsets into the UTF-8 buffer, always on a codepoint
+ * boundary. The box/border art and the on-screen keyboard are widgets
+ * built on top, not core (DESIGN.md §2.5). */
+surf_node  *surf_textinput_new(const surf_font *f, int16_t x, int16_t y,
+                               int16_t w, surf_color c);
+void        surf_textinput_set_text(surf_node *n, const char *str);
+const char *surf_textinput_text(const surf_node *n);
+void        surf_textinput_insert(surf_node *n, const char *utf8);  /* at caret */
+void        surf_textinput_backspace(surf_node *n);
+void        surf_textinput_delete(surf_node *n);
+int32_t     surf_textinput_caret(const surf_node *n);
+void        surf_textinput_set_caret(surf_node *n, int32_t byte_idx, bool extend);
+void        surf_textinput_move(surf_node *n, int32_t delta_cp, bool extend);
+int32_t     surf_textinput_index_from_x(const surf_node *n, int16_t local_x);
+void        surf_textinput_set_focused(surf_node *n, bool focused);
 
 /* ---- widgets: built from nodes, styled by caller-owned assets ---- */
 

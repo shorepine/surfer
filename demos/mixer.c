@@ -8,6 +8,10 @@
 #include "surfer.h"
 #include "hal_sdl.h"
 #include "widget_assets.h"
+#include "font_ui16.h"
+#include "font_ui28.h"
+
+static const char *knob_names[6] = {"cutoff", "res", "env", "lfo", "mix", "vol"};
 
 #define W 1280
 #define H 720
@@ -56,6 +60,9 @@ int main(int argc, char **argv)
 
     surf_node_add(surf_screen(), surf_rect_new(0, 0, W, 48, SURF_RGB(38, 42, 52)));
     surf_node_add(surf_screen(), surf_rect_new(0, H - 80, W, 80, SURF_RGB(38, 42, 52)));
+    surf_node_add(surf_screen(),
+                  surf_text_new(&surf_font_ui28, "surfer mixer", 16, 6,
+                                SURF_RGB(240, 242, 248)));
 
     surf_knob *knobs[N];
     surf_slider *sliders[N];
@@ -71,6 +78,12 @@ int main(int argc, char **argv)
         sbar[i] = surf_rect_new(kx, (int16_t)(H - 40), 1, 8, SURF_RGB(80, 200, 220));
         surf_node_add(surf_screen(), kbar[i]);
         surf_node_add(surf_screen(), sbar[i]);
+
+        surf_node *name = surf_text_new(&surf_font_ui16, knob_names[i],
+                                        kx, 172, SURF_RGB(180, 186, 198));
+        surf_text_set_wrap(name, 64);
+        surf_text_set_align(name, SURF_ALIGN_CENTER);
+        surf_node_add(surf_screen(), name);
         if (!knobs[i] || !sliders[i] || !kbar[i] || !sbar[i]) {
             fprintf(stderr, "mixer: widget setup failed\n");
             return 1;
@@ -128,6 +141,8 @@ int main(int argc, char **argv)
             break;
     }
 
+    if (getenv("SURF_SHOT"))
+        surf_hal_sdl_dump_ppm(getenv("SURF_SHOT"));
     surf_deinit();
     surf_hal_sdl_quit();
     return 0;

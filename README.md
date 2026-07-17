@@ -92,7 +92,7 @@ idf.py -p <port> flash monitor     # boots into a bench, then the demo
 - [x] M0 — hal vtable, SDL backend, dirty-rect compositor
 - [x] M1 — filmstrip/9-patch nodes, knob + slider, touch capture
 - [x] M2 — P4 backend: PPA, DSI, buffering benchmark, 60 fps under finger
-- [ ] M3 — text: baked font atlases, label, wrap, textinput
+- [x] M3 — text: baked font atlases, label, wrap, textinput + caret
 - [ ] M4 — scrollview + momentum, checkbox, dropdown
 - [ ] M5 — MicroPython bindings
 - [ ] M6 — web build (emscripten), real art pass, default theme

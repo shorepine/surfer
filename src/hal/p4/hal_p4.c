@@ -111,6 +111,24 @@ static void h_blit(const surf_image *src, surf_rect sr, surf_point dst)
     srm_copy(src, sr, S.fb, S.fb_bytes, S.cfg.w, S.cfg.h, dst);
 }
 
+static int bytespp(const surf_image *img)
+{
+    switch (img->format) {
+    case SURF_FMT_ARGB8888: return 4;
+    case SURF_FMT_A8:       return 1;
+    default:                return 2;
+    }
+}
+
+static ppa_blend_color_mode_t blend_cm(const surf_image *img)
+{
+    switch (img->format) {
+    case SURF_FMT_ARGB8888: return PPA_BLEND_COLOR_MODE_ARGB8888;
+    case SURF_FMT_A8:       return PPA_BLEND_COLOR_MODE_A8;
+    default:                return PPA_BLEND_COLOR_MODE_RGB565;
+    }
+}
+
 static void h_blend(const surf_image *src, surf_rect sr, surf_point dst, uint8_t opa)
 {
     ppa_blend_oper_config_t op = {
@@ -126,14 +144,13 @@ static void h_blend(const surf_image *src, surf_rect sr, surf_point dst, uint8_t
         },
         .in_fg = {
             .buffer = src->pixels,
-            .pic_w = (uint32_t)(src->stride / (src->format == SURF_FMT_ARGB8888 ? 4 : 2)),
+            .pic_w = (uint32_t)(src->stride / bytespp(src)),
             .pic_h = (uint32_t)src->h,
             .block_w = (uint32_t)sr.w,
             .block_h = (uint32_t)sr.h,
             .block_offset_x = (uint32_t)sr.x,
             .block_offset_y = (uint32_t)sr.y,
-            .blend_cm = src->format == SURF_FMT_ARGB8888 ? PPA_BLEND_COLOR_MODE_ARGB8888
-                                                         : PPA_BLEND_COLOR_MODE_RGB565,
+            .blend_cm = blend_cm(src),
         },
         .out = {
             .buffer = S.fb,
@@ -148,6 +165,12 @@ static void h_blend(const surf_image *src, surf_rect sr, surf_point dst, uint8_t
         .bg_alpha_fix_val = 0xff,
         .fg_alpha_update_mode = opa == 255 ? PPA_ALPHA_NO_CHANGE : PPA_ALPHA_SCALE,
         .fg_alpha_scale_ratio = (float)opa / 255.0f,
+        /* A8 (glyph atlases): alpha from the data, color from the tint */
+        .fg_fix_rgb_val = {
+            .r = (uint8_t)(((src->tint >> 11) << 3) | ((src->tint >> 13) & 0x7)),
+            .g = (uint8_t)(((src->tint >> 5) << 2) & 0xfc),
+            .b = (uint8_t)((src->tint << 3) & 0xf8),
+        },
         .mode = PPA_TRANS_MODE_BLOCKING,
     };
     ppa_do_blend(S.blend_cl, &op);

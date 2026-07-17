@@ -7,6 +7,7 @@
 #include "mock_hal.h"
 
 void run_widget_tests(void);  /* tests/test_widgets.c */
+void run_text_tests(void);    /* tests/test_text.c */
 
 /* ---- tests ---- */
 
@@ -234,6 +235,7 @@ int main(void)
     test_compose();
     test_pool();
     run_widget_tests();
+    run_text_tests();
     surf_deinit();
 
     printf("%d checks, %d failures\n", test_checks, test_failures);

@@ -92,5 +92,16 @@ bandwidth/PPA benchmark, then the mixer demo. Measured under finger:
 ~70–200 µs each regardless of size → bake assets at final size (the
 slider uses a sprite track when style art matches exactly; tiled 9-patch
 is the fallback). Flash: `idf.py -p <port> flash` from `ports/esp32p4/`.
-Next milestone: **M3** (see DESIGN.md §4) — text: surfpack font baking,
-label, wrap, textinput + caret.
+
+M3 done (desktop-verified; device run pending a replug): text.
+`tools/fontbake.c` (stb_truetype, host tool) bakes TTFs into A8 atlas +
+advance/kern headers at build time; runtime text is clipped atlas blits
+(`src/text/`: UTF-8, greedy wrap on space/hyphen, kerning, align,
+ellipsize; label + textinput nodes with caret/selection/scroll-into-view;
+byte-offset indices). A8 images carry a `tint`; SDL blends in software,
+P4 uses PPA `PPA_BLEND_COLOR_MODE_A8` + `fg_fix_rgb_val`. Desktop
+keyboard feeds textinput via `surf_hal_sdl_poll_key` (hal-adjacent, not
+in the vtable — the device path is the M-later OSK widget).
+`build/surfer_type` is the text demo; `SURF_SHOT=x.ppm` dumps any demo's
+framebuffer. Next milestone: **M4** (see DESIGN.md §4) — scrollview +
+momentum, checkbox, dropdown.

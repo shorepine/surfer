@@ -24,6 +24,10 @@
 #include "surfer.h"
 #include "hal_p4.h"
 #include "widget_assets.h"
+#include "font_ui16.h"
+#include "font_ui28.h"
+
+static const char *knob_names[6] = {"cutoff", "res", "env", "lfo", "mix", "vol"};
 
 #define BENCH_W 1920
 #define BENCH_H 1080
@@ -187,14 +191,24 @@ static bool touch_poll(int16_t *x, int16_t *y)
     return true;
 }
 
-static surf_image mk_image(const void *rodata, int16_t w, int16_t h, const surf_hal *hal)
+/* flash .rodata → PSRAM: the PPA can't DMA from memory-mapped flash */
+static surf_image mk_image(const void *rodata, int16_t w, int16_t h, int bpp,
+                           uint8_t fmt, const surf_hal *hal)
 {
-    size_t bytes = (size_t)w * h * 4;
+    size_t bytes = (size_t)w * h * (size_t)bpp;
     void *px = hal->alloc_image(bytes);
     memcpy(px, rodata, bytes);
     surf_hal_p4_sync(px, bytes);
-    return (surf_image){.pixels = px, .w = w, .h = h, .stride = w * 4,
-                        .format = SURF_FMT_ARGB8888, .opaque = false};
+    return (surf_image){.pixels = px, .w = w, .h = h, .stride = w * bpp,
+                        .format = fmt, .opaque = false};
+}
+
+static surf_font mk_font(const surf_font *baked, const surf_hal *hal)
+{
+    surf_font f = *baked;
+    f.atlas = mk_image(baked->atlas.pixels, baked->atlas.w, baked->atlas.h, 1,
+                       SURF_FMT_A8, hal);
+    return f;
 }
 
 static void bar_show(int32_t v, void *user)
@@ -255,15 +269,22 @@ void app_main(void)
     surf_config scfg = {.max_nodes = 128, .bg = SURF_RGB(24, 26, 32)};
     surf_init(hal, LCD_W, LCD_H, &scfg);
 
-    surf_image knob_img = mk_image(widget_knob_px, WKNOB_STRIP_W, WKNOB_SIZE, hal);
-    surf_image track_img = mk_image(widget_trackfull_px, WTRACKFULL_W, WTRACKFULL_H, hal);
-    surf_image cap_img = mk_image(widget_cap_px, WCAP_W, WCAP_H, hal);
+    surf_image knob_img = mk_image(widget_knob_px, WKNOB_STRIP_W, WKNOB_SIZE, 4,
+                                   SURF_FMT_ARGB8888, hal);
+    surf_image track_img = mk_image(widget_trackfull_px, WTRACKFULL_W, WTRACKFULL_H, 4,
+                                    SURF_FMT_ARGB8888, hal);
+    surf_image cap_img = mk_image(widget_cap_px, WCAP_W, WCAP_H, 4,
+                                  SURF_FMT_ARGB8888, hal);
+    surf_font ui16 = mk_font(&surf_font_ui16, hal);
+    surf_font ui28 = mk_font(&surf_font_ui28, hal);
     surf_knob_style kstyle = {.strip = &knob_img, .frame_w = WKNOB_SIZE,
                               .frame_h = WKNOB_SIZE, .frames = WKNOB_FRAMES};
     surf_slider_style sstyle = {.track = &track_img, .inset = WTRACK_INSET, .cap = &cap_img};
 
     surf_node_add(surf_screen(), surf_rect_new(0, 0, LCD_W, 40, SURF_RGB(38, 42, 52)));
     surf_node_add(surf_screen(), surf_rect_new(0, LCD_H - 56, LCD_W, 56, SURF_RGB(38, 42, 52)));
+    surf_node_add(surf_screen(),
+                  surf_text_new(&ui28, "surfer mixer", 12, 2, SURF_RGB(240, 242, 248)));
 
     surf_knob *knobs[N];
     surf_slider *sliders[N];
@@ -277,6 +298,12 @@ void app_main(void)
         sbar[i] = surf_rect_new(kx, (int16_t)(LCD_H - 28), 1, 8, SURF_RGB(80, 200, 220));
         surf_node_add(surf_screen(), kbar[i]);
         surf_node_add(surf_screen(), sbar[i]);
+
+        surf_node *name = surf_text_new(&ui16, knob_names[i], kx, 140,
+                                        SURF_RGB(180, 186, 198));
+        surf_text_set_wrap(name, WKNOB_SIZE);
+        surf_text_set_align(name, SURF_ALIGN_CENTER);
+        surf_node_add(surf_screen(), name);
         surf_knob_on_change(knobs[i], bar_show, kbar[i]);
         surf_slider_on_change(sliders[i], bar_show, sbar[i]);
         surf_knob_set_value(knobs[i], i * SURF_ONE / (N - 1));

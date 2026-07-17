@@ -17,8 +17,35 @@ static struct {
     int16_t       w, h;
     surf_touch    ring[TOUCH_RING];
     int           ring_r, ring_w;
+    surf_sdl_key  keys[TOUCH_RING];
+    int           key_r, key_w;
     bool          mouse_down;
 } S;
+
+static void push_key(uint8_t kind, bool shift, const char *utf8)
+{
+    int next = (S.key_w + 1) % TOUCH_RING;
+    if (next == S.key_r)
+        return;
+    surf_sdl_key *k = &S.keys[S.key_w];
+    k->kind = kind;
+    k->shift = shift;
+    k->utf8[0] = 0;
+    if (utf8) {
+        strncpy(k->utf8, utf8, sizeof k->utf8 - 1);
+        k->utf8[sizeof k->utf8 - 1] = 0;
+    }
+    S.key_w = next;
+}
+
+bool surf_hal_sdl_poll_key(surf_sdl_key *out)
+{
+    if (S.key_r == S.key_w)
+        return false;
+    *out = S.keys[S.key_r];
+    S.key_r = (S.key_r + 1) % TOUCH_RING;
+    return true;
+}
 
 /* ---- frame ops ---- */
 
@@ -71,6 +98,20 @@ static inline uint16_t blend_px(uint16_t dst, uint32_t src, uint32_t a)
 
 static void h_blend(const surf_image *src, surf_rect sr, surf_point dst, uint8_t opa)
 {
+    if (src->format == SURF_FMT_A8) {
+        /* glyph atlases: alpha from the image, color from the tint */
+        surf_color t = src->tint;
+        uint32_t rgb = ((uint32_t)((t >> 8) & 0xf8) << 16) |
+                       ((uint32_t)((t >> 3) & 0xfc) << 8) |
+                       (uint32_t)((t << 3) & 0xf8);
+        for (int y = 0; y < sr.h; y++) {
+            const uint8_t *s = (const uint8_t *)src->pixels + (sr.y + y) * src->stride + sr.x;
+            uint16_t *d = S.fb + (dst.y + y) * S.w + dst.x;
+            for (int x = 0; x < sr.w; x++)
+                d[x] = blend_px(d[x], rgb, (uint32_t)s[x] * opa / 255);
+        }
+        return;
+    }
     if (src->format == SURF_FMT_RGB565) {
         /* 565 has no per-pixel alpha; only the global opacity applies. */
         if (opa == 255) {
@@ -197,6 +238,7 @@ const surf_hal *surf_hal_sdl_init(int16_t w, int16_t h, const char *title)
     if (!S.tex || !S.fb)
         goto fail;
     memset(S.fb, 0, (size_t)w * h * 2);
+    SDL_StartTextInput();
     return &hal_sdl;
 fail:
     surf_hal_sdl_quit();
@@ -213,6 +255,25 @@ void surf_hal_sdl_quit(void)
     SDL_Quit();
 }
 
+bool surf_hal_sdl_dump_ppm(const char *path)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f || !S.fb)
+        return false;
+    fprintf(f, "P6\n%d %d\n255\n", S.w, S.h);
+    for (int i = 0; i < S.w * S.h; i++) {
+        uint16_t p = S.fb[i];
+        uint8_t rgb[3] = {
+            (uint8_t)(((p >> 8) & 0xf8) | (p >> 13)),
+            (uint8_t)(((p >> 3) & 0xfc) | ((p >> 9) & 0x03)),
+            (uint8_t)(((p << 3) & 0xf8) | ((p >> 2) & 0x07)),
+        };
+        fwrite(rgb, 1, 3, f);
+    }
+    fclose(f);
+    return true;
+}
+
 bool surf_hal_sdl_pump(void)
 {
     SDL_Event e;
@@ -220,9 +281,22 @@ bool surf_hal_sdl_pump(void)
         switch (e.type) {
         case SDL_QUIT:
             return false;
-        case SDL_KEYDOWN:
-            if (e.key.keysym.sym == SDLK_ESCAPE)
-                return false;
+        case SDL_KEYDOWN: {
+            bool shift = (e.key.keysym.mod & KMOD_SHIFT) != 0;
+            switch (e.key.keysym.sym) {
+            case SDLK_ESCAPE:    return false;
+            case SDLK_LEFT:      push_key(SURF_KEY_LEFT, shift, NULL); break;
+            case SDLK_RIGHT:     push_key(SURF_KEY_RIGHT, shift, NULL); break;
+            case SDLK_HOME:      push_key(SURF_KEY_HOME, shift, NULL); break;
+            case SDLK_END:       push_key(SURF_KEY_END, shift, NULL); break;
+            case SDLK_BACKSPACE: push_key(SURF_KEY_BACKSPACE, shift, NULL); break;
+            case SDLK_DELETE:    push_key(SURF_KEY_DELETE, shift, NULL); break;
+            case SDLK_RETURN:    break;
+            }
+            break;
+        }
+        case SDL_TEXTINPUT:
+            push_key(SURF_KEY_TEXT, false, e.text.text);
             break;
         case SDL_MOUSEBUTTONDOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
