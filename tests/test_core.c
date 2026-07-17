@@ -4,78 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "surf_internal.h"
+#include "mock_hal.h"
 
-static int checks, failures;
-#define OK(cond) do {                                                \
-        checks++;                                                    \
-        if (!(cond)) {                                               \
-            failures++;                                              \
-            printf("FAIL %s:%d  %s\n", __FILE__, __LINE__, #cond);   \
-        }                                                            \
-    } while (0)
-
-/* ---- mock hal: records the op stream ---- */
-
-typedef struct {
-    char       op;  /* 'F' fill, 'B' blit, 'A' blend, 'P' present */
-    surf_rect  r;
-    surf_color c;
-    const surf_image *img;
-    surf_rect  src;
-    surf_point dst;
-    int        nrects;
-} mock_op;
-
-static mock_op ops[512];
-static int nops;
-
-static void m_fill(surf_rect dst, surf_color c)
-{
-    ops[nops++] = (mock_op){.op = 'F', .r = dst, .c = c};
-}
-static void m_blit(const surf_image *src, surf_rect sr, surf_point dst)
-{
-    ops[nops++] = (mock_op){.op = 'B', .img = src, .src = sr, .dst = dst};
-}
-static void m_blend(const surf_image *src, surf_rect sr, surf_point dst, uint8_t opa)
-{
-    (void)opa;
-    ops[nops++] = (mock_op){.op = 'A', .img = src, .src = sr, .dst = dst};
-}
-static void m_scale_blit(const surf_image *s, surf_rect a, surf_rect b)
-{
-    (void)s; (void)a; (void)b;
-}
-static void m_present(const surf_rect *dirty, int n)
-{
-    (void)dirty;
-    ops[nops++] = (mock_op){.op = 'P', .nrects = n};
-}
-static void m_wait_idle(void) {}
-static uint64_t m_now_us(void) { return 0; }
-static bool m_poll_touch(surf_touch *out) { (void)out; return false; }
-static void *m_alloc_image(size_t b) { return malloc(b); }
-static void m_free_image(void *p) { free(p); }
-
-static const surf_hal mock_hal = {
-    m_fill, m_blit, m_blend, m_scale_blit, m_present,
-    m_wait_idle, m_now_us, m_poll_touch, m_alloc_image, m_free_image,
-};
-
-static bool rect_eq(surf_rect a, surf_rect b)
-{
-    return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h;
-}
-
-static void fresh(int16_t w, int16_t h, int max_nodes)
-{
-    surf_deinit();
-    surf_config cfg = {.max_nodes = max_nodes, .bg = SURF_RGB(0, 0, 0)};
-    surf_init(&mock_hal, w, h, &cfg);
-    surf_tick();  /* consume the initial full-screen damage */
-    nops = 0;
-}
+void run_widget_tests(void);  /* tests/test_widgets.c */
 
 /* ---- tests ---- */
 
@@ -302,8 +233,9 @@ int main(void)
     test_hit();
     test_compose();
     test_pool();
+    run_widget_tests();
     surf_deinit();
 
-    printf("%d checks, %d failures\n", checks, failures);
-    return failures ? 1 : 0;
+    printf("%d checks, %d failures\n", test_checks, test_failures);
+    return test_failures ? 1 : 0;
 }

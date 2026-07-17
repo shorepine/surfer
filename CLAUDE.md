@@ -70,10 +70,15 @@ demos/
 
 ## Current state
 
-M0 done: hal vtable (`include/surfer.h`), sdl backend (`src/hal/sdl/`),
-group/rect/sprite nodes, dirty-rect compositor with occlusion early-out,
-hit test, unit tests, bouncing-sprite demo (`demos/bounce.c`; sprite art
-baked at build time by `tools/gen_demo_assets.py`). Demo holds 60 fps
-windowed, ~0.5 ms/tick compose cost headless. Next milestone: **M1** (see
-DESIGN.md §4) — filmstrip + ninepatch nodes, knob + slider widgets with
-placeholder art, touch capture, drag mapping.
+M0 + M1 done. Core: group/rect/sprite/filmstrip/ninepatch nodes,
+dirty-rect compositor with occlusion early-out (ninepatch stretches by
+tiling — no scale_blit in the frame path), hit test, touch dispatch with
+pointer capture (`src/core/input.c`). Widgets: knob (vertical-drag
+default, angular optional) and slider, written against `surfer.h` only.
+`make sdl` builds the M1 mixer demo (6 knobs + 6 sliders) →
+`build/surfer_demo`, plus the M0 bounce demo → `build/surfer_bounce`;
+placeholder art baked by `tools/gen_widget_assets.py`. Acceptance
+verified: 60 fps windowed with all 12 controls animating
+(`SURF_AUTODRAG=1`), ~0.5 ms/tick compose headless. Next milestone:
+**M2** (see DESIGN.md §4) — p4 hal backend (PPA, 2D-DMA, DSI present,
+buffering benchmark on hardware); do not build past it until it passes.

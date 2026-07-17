@@ -11,6 +11,8 @@ enum {
     SURF_NODE_GROUP,
     SURF_NODE_RECT,
     SURF_NODE_SPRITE,
+    SURF_NODE_FILMSTRIP,
+    SURF_NODE_NINEPATCH,
 };
 
 enum {
@@ -26,9 +28,20 @@ struct surf_node {
     surf_node *parent;
     surf_node *first, *last;  /* children; last is painted frontmost */
     surf_node *prev, *next;   /* siblings; next doubles as free-list link */
+    surf_touch_cb on_touch;
+    void      *touch_user;
     union {
         struct { surf_color color; } rect;
         struct { const surf_image *img; surf_rect src; } sprite;
+        struct {
+            const surf_image *img;
+            int16_t fw, fh;      /* frame size; node w/h mirror these */
+            int16_t frame, nframes, per_row;
+        } strip;
+        struct {
+            const surf_image *img;
+            int16_t l, t, r, b;  /* insets; node w/h are the dst size */
+        } nine;
     } u;
 };
 
@@ -65,11 +78,14 @@ typedef struct {
     int             pool_cap;
     surf_node      *free_list;
     surf_node      *root;
+    surf_node      *capture;  /* node holding the pointer, DOWN → UP */
     surf_dirty      dirty;
     surf_paint_ent *plist;  /* pool_cap entries */
 } surf_ctx;
 
 extern surf_ctx surf_g;
+
+void surf_input_dispatch(const surf_touch *t);
 
 bool      surf_node_attached(const surf_node *n);
 surf_rect surf_node_subtree_bounds(const surf_node *n, int16_t px, int16_t py);

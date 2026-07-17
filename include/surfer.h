@@ -56,6 +56,12 @@ typedef struct {
 
 typedef struct surf_node surf_node;
 
+/* Widget values are Q16 fixed point in [0, SURF_ONE]. */
+#define SURF_ONE 65536
+
+typedef void (*surf_touch_cb)(surf_node *n, const surf_touch *t, void *user);
+typedef void (*surf_change_cb)(int32_t value_q16, void *user);
+
 typedef struct {
     int        max_nodes;  /* node pool size; 0 → 256 */
     surf_color bg;         /* fill color under non-opaque content */
@@ -71,6 +77,11 @@ void       surf_tick(void);  /* compose dirty rects + present */
 surf_node *surf_group_new(int16_t x, int16_t y);
 surf_node *surf_rect_new(int16_t x, int16_t y, int16_t w, int16_t h, surf_color c);
 surf_node *surf_sprite_new(const surf_image *img, int16_t x, int16_t y);
+surf_node *surf_filmstrip_new(const surf_image *img, int16_t frame_w, int16_t frame_h,
+                              int16_t x, int16_t y);
+surf_node *surf_ninepatch_new(const surf_image *img, int16_t x, int16_t y,
+                              int16_t w, int16_t h,
+                              int16_t l, int16_t t, int16_t r, int16_t b);
 
 /* tree — detach keeps the subtree fully alive (DESIGN.md §2.2) */
 void surf_node_add(surf_node *parent, surf_node *child);
@@ -84,9 +95,55 @@ void surf_rect_set_color(surf_node *n, surf_color c);
 void surf_rect_set_size(surf_node *n, int16_t w, int16_t h);
 void surf_sprite_set_src(surf_node *n, surf_rect src);
 void surf_group_set_clip(surf_node *g, int16_t w, int16_t h);  /* 0×0 disables */
+void surf_filmstrip_set_frame(surf_node *n, int16_t frame);
+int16_t surf_filmstrip_frame(const surf_node *n);
+void surf_ninepatch_set_size(surf_node *n, int16_t w, int16_t h);
 
-/* input */
+/* input: touch routes to the hit node's nearest ancestor with a handler,
+ * which holds pointer capture until UP (DESIGN.md §2.6) */
 surf_node *surf_hit_test(int16_t x, int16_t y);
+void surf_node_set_on_touch(surf_node *n, surf_touch_cb cb, void *user);
+void surf_node_abs_pos(const surf_node *n, int16_t *x, int16_t *y);
+
+/* ---- widgets: built from nodes, styled by caller-owned assets ---- */
+
+typedef struct {
+    const surf_image *track;  /* 9-patch source */
+    int16_t           inset;  /* uniform 9-slice inset */
+    const surf_image *cap;    /* cap sprite */
+} surf_slider_style;
+
+typedef struct surf_slider surf_slider;
+
+surf_slider *surf_slider_new(surf_node *parent, int16_t x, int16_t y,
+                             int16_t w, int16_t h, const surf_slider_style *style);
+void       surf_slider_destroy(surf_slider *s);
+surf_node *surf_slider_node(surf_slider *s);  /* root group: detach/reattach */
+void       surf_slider_set_value(surf_slider *s, int32_t value_q16);  /* no cb */
+int32_t    surf_slider_value(const surf_slider *s);
+void       surf_slider_on_change(surf_slider *s, surf_change_cb cb, void *user);
+
+typedef struct {
+    const surf_image *strip;  /* filmstrip: frames left-to-right */
+    int16_t           frame_w, frame_h;
+    int16_t           frames;
+} surf_knob_style;
+
+typedef enum {
+    SURF_KNOB_DRAG_VERTICAL = 0,  /* DAW convention (DESIGN.md §2.6) */
+    SURF_KNOB_DRAG_ANGULAR  = 1,
+} surf_knob_mode;
+
+typedef struct surf_knob surf_knob;
+
+surf_knob *surf_knob_new(surf_node *parent, int16_t x, int16_t y,
+                         const surf_knob_style *style);
+void       surf_knob_destroy(surf_knob *k);
+surf_node *surf_knob_node(surf_knob *k);
+void       surf_knob_set_mode(surf_knob *k, surf_knob_mode mode);
+void       surf_knob_set_value(surf_knob *k, int32_t value_q16);  /* no cb */
+int32_t    surf_knob_value(const surf_knob *k);
+void       surf_knob_on_change(surf_knob *k, surf_change_cb cb, void *user);
 
 #ifdef __cplusplus
 }

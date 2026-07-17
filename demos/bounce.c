@@ -106,9 +106,6 @@ int main(int argc, char **argv)
     int window_frames = 0;
 
     while (surf_hal_sdl_pump()) {
-        surf_touch touch;
-        while (hal->poll_touch(&touch)) { /* input lands in M1 */ }
-
         for (int i = 0; i < nm; i++)
             mover_step(&movers[i]);
 
