@@ -64,7 +64,7 @@ src/core/               scene graph, dirty rects, hit test, anim
 src/widgets/            knob, slider, ...
 src/text/               atlas text, wrap, textinput logic
 src/hal/sdl/  src/hal/p4/  src/hal/web/
-bindings/micropython/modsurfer.c
+bindings/surfer/modsurfer.c
 tools/surfpack.py       asset + font atlas packer
 assets/                 source art (PNG/Blender) → packed by surfpack
 ports/esp32p4/          ESP-IDF project wrapping the p4 hal
@@ -118,5 +118,15 @@ travel along a scrollable axis — unless the handler set
 handler + size are hittable (hot areas, scrims). Widgets: checkbox
 (2-frame filmstrip) and dropdown (popup attaches to the screen root —
 detach/reattach as overlay). `build/surfer_settings` is the M4 demo.
-Next milestone: **M5** (see DESIGN.md §4) — MicroPython bindings, M1
-demo from Python on device.
+
+M5 done on the unix port (esp micropython is next): hand-written binding
+`bindings/surfer/modsurfer.c` (two MP types — Node and Widget — plus flat
+factory functions; capitalized aliases; callbacks fire from tick on the
+same thread; a GC-root registry keeps C-referenced objects alive).
+`make mpy` builds it (MPY_DIR ?= ~/micropython, pinned v1.26.0; needs
+`make -C ports/unix submodules` once). `bindings/surfer/tulip.py` is
+tulip mode: an on-screen REPL on a mono16 textgrid + tulipcc-style
+UIScreen — `s = surfer.slider(x,y)`, `screen.add(s)`, `s.y_pos`,
+`s.callback = fn` all live. `bindings/surfer/test_surfer.py` is the
+headless binding test (uses `surfer._touch` injection). Remaining:
+esp32p4 MicroPython port, M6 web build + real art.

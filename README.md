@@ -32,6 +32,12 @@ in core ticks) with checkboxes, sliders, and a dropdown whose popup
 overlays via detach/reattach. Scrolling steals taps after an 8px
 threshold; slider and knob drags are never stolen.*
 
+![tulip mode: a MicroPython REPL on screen with live widgets](docs/tulip.png)
+
+*M5, "tulip mode": a MicroPython REPL rendered into a surfer textgrid,
+with widgets created live from typed Python — `s = surfer.slider(x, y)`,
+`screen.add(s)`, `s.callback = fn`. Hand-written binding, unix port.*
+
 ## The idea
 
 At 1080p RGB565, one frame is ~4 MB. On an ESP32-P4 the framebuffer lives in
@@ -114,7 +120,7 @@ idf.py -p <port> flash monitor     # boots into a bench, then the demo
 - [x] M2 — P4 backend: PPA, DSI, buffering benchmark, 60 fps under finger
 - [x] M3 — text: baked font atlases, label, wrap, textinput + caret
 - [x] M4 — scrollview + momentum, checkbox, dropdown
-- [ ] M5 — MicroPython bindings
+- [x] M5 — MicroPython bindings (unix port; esp32p4 port next)
 - [ ] M6 — web build (emscripten), real art pass, default theme
 
 ## License

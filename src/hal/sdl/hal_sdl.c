@@ -302,7 +302,7 @@ bool surf_hal_sdl_pump(void)
             case SDLK_END:       push_key(SURF_KEY_END, shift, NULL); break;
             case SDLK_BACKSPACE: push_key(SURF_KEY_BACKSPACE, shift, NULL); break;
             case SDLK_DELETE:    push_key(SURF_KEY_DELETE, shift, NULL); break;
-            case SDLK_RETURN:    break;
+            case SDLK_RETURN:    push_key(SURF_KEY_ENTER, shift, NULL); break;
             }
             break;
         }

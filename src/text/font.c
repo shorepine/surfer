@@ -31,6 +31,14 @@ uint32_t surf_utf8_next(const char *s, int32_t *i)
     return 0xfffd;
 }
 
+uint32_t surf_utf8_first(const char *s)
+{
+    if (!s || !s[0])
+        return 0;
+    int32_t i = 0;
+    return surf_utf8_next(s, &i);
+}
+
 int32_t surf_utf8_prev(const char *s, int32_t i)
 {
     if (i <= 0)

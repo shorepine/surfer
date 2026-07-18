@@ -24,6 +24,7 @@ typedef enum {
     SURF_KEY_END,
     SURF_KEY_BACKSPACE,
     SURF_KEY_DELETE,
+    SURF_KEY_ENTER,
 } surf_sdl_key_kind;
 
 typedef struct {

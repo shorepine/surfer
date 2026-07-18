@@ -369,6 +369,22 @@ void surf_node_abs_pos(const surf_node *n, int16_t *x, int16_t *y)
     if (y) *y = ay;
 }
 
+surf_point surf_node_pos(const surf_node *n)
+{
+    return n ? (surf_point){n->x, n->y} : (surf_point){0, 0};
+}
+
+surf_point surf_node_size(const surf_node *n)
+{
+    return n ? (surf_point){n->w, n->h} : (surf_point){0, 0};
+}
+
+void surf_inject_touch(const surf_touch *t)
+{
+    if (surf_g.root && t)
+        surf_input_dispatch(t);
+}
+
 void surf_node_set_gesture_grab(surf_node *n, bool grab)
 {
     if (!n)

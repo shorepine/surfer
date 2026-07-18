@@ -45,7 +45,7 @@ $(GEN_DIR)/font_ui28.h: build/tools/fontbake assets/fonts/Roboto-Regular.ttf
 $(GEN_DIR)/font_mono16.h: build/tools/fontbake assets/fonts/JetBrainsMono-Regular.ttf
 	@mkdir -p $(GEN_DIR)
 	build/tools/fontbake mono16 16 assets/fonts/JetBrainsMono-Regular.ttf $@ \
-		"32-126,167,181,8230"
+		"32-126,167,181,8211,8212,8230"
 
 # the "desktop demo" tracks the current milestone: mixer (M1) + text labels (M3)
 build/surfer_demo: $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) demos/mixer.c \
@@ -84,6 +84,30 @@ build/surfer_test: $(CORE_SRCS) $(WIDGET_SRCS) $(TEST_SRCS) tests/mock_hal.h $(H
 	@mkdir -p build
 	$(CC) $(CFLAGS) -Isrc/core -Itests \
 		-o $@ $(CORE_SRCS) $(WIDGET_SRCS) $(TEST_SRCS) -lm
+
+# static lib + generated headers for the MicroPython binding
+LIB_SRCS := $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS)
+LIB_OBJS := $(patsubst %.c,build/obj/%.o,$(LIB_SRCS))
+
+build/obj/%.o: %.c $(HDRS)
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -c $< -o $@
+
+build/libsurfer.a: $(LIB_OBJS)
+	ar rcs $@ $(LIB_OBJS)
+
+gen: $(GEN_DIR)/widget_assets.h $(GEN_DIR)/font_ui16.h $(GEN_DIR)/font_ui28.h \
+	$(GEN_DIR)/font_mono16.h
+
+MPY_DIR ?= $(HOME)/micropython
+
+mpy: build/libsurfer.a gen
+	$(MAKE) -C $(MPY_DIR)/ports/unix USER_C_MODULES=$(abspath bindings) \
+		SURFER_DIR=$(abspath .) \
+		CFLAGS_EXTRA="-Wno-gnu-folding-constant"  # newer clang vs MP v1.26
+	@echo "→ $(MPY_DIR)/ports/unix/build-standard/micropython"
+
+.PHONY: gen mpy
 
 clean:
 	rm -rf build

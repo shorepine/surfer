@@ -123,8 +123,14 @@ void surf_ninepatch_set_size(surf_node *n, int16_t w, int16_t h);
 surf_node *surf_hit_test(int16_t x, int16_t y);
 void surf_node_set_on_touch(surf_node *n, surf_touch_cb cb, void *user);
 void surf_node_abs_pos(const surf_node *n, int16_t *x, int16_t *y);
+surf_point surf_node_pos(const surf_node *n);
+surf_point surf_node_size(const surf_node *n);
+/* decode the first codepoint of a UTF-8 string (0 for empty/NULL) */
+uint32_t surf_utf8_first(const char *s);
 /* grab = an enclosing scrollview may not steal this node's gestures */
 void surf_node_set_gesture_grab(surf_node *n, bool grab);
+/* feed a synthetic touch through the normal dispatch path (tests, OSK) */
+void surf_inject_touch(const surf_touch *t);
 
 /* ---- text: atlases baked at build time by tools/fontbake.c ---- */
 
