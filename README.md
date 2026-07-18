@@ -9,8 +9,21 @@ generation UI for [Tulip](https://tulip.computer).
 
 > ⚠️ **Early days.** This is an architecture experiment with working code and
 > real measurements, not a finished library. The API will change. We're
-> currently through M2 of the milestone plan in [DESIGN.md](DESIGN.md) —
+> currently through M3 of the milestone plan in [DESIGN.md](DESIGN.md) —
 > which is the source of truth for how everything works and why.
+
+![the mixer demo: 6 knobs + 6 sliders with labels](docs/mixer.png)
+
+*The mixer demo — 6 filmstrip knobs + 6 sliders, draggable by mouse or
+finger, with baked-atlas labels. This exact scene runs at 63–66 fps under
+finger on an ESP32-P4, every pixel composited by the PPA. (Screenshots are
+straight framebuffer dumps, `SURF_SHOT=x.ppm`.)*
+
+![the text demo: wrap, ellipsis, textinput with caret](docs/text.png)
+
+*M3 text: greedy word wrap, ellipsize, and an editable textinput with
+caret, selection, and scroll-into-view. Glyphs are stb_truetype-baked A8
+atlases; drawing text is the same clipped-blit path as everything else.*
 
 ## The idea
 
