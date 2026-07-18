@@ -73,6 +73,22 @@ static void scroll_damage(surf_node *sv, int32_t old_x_q16, int32_t old_y_q16)
         int16_t ady = dy < 0 ? (int16_t)-dy : dy;
         if (on.w != v.w || on.h != v.h || ady >= v.h)
             goto slow;
+        /* Pending dirty rects inside the viewport describe content that
+         * is about to move — carry them along, or a second shift in the
+         * same tick (touch events outpace frames) drags a never-painted
+         * strip into view as a stale band. Union old+new spots so both
+         * repaint. */
+        surf_dirty *sd = &surf_g.dirty;
+        for (int i = 0; i < sd->n; i++) {
+            surf_rect in = surf_rect_intersect(sd->r[i], v);
+            if (surf_rect_empty(in))
+                continue;
+            surf_rect moved = in;
+            moved.y = (int16_t)(moved.y - dy);
+            moved = surf_rect_intersect(moved, v);
+            if (!surf_rect_empty(moved))
+                sd->r[i] = surf_rect_union(sd->r[i], moved);
+        }
         surf_g.hal->scroll_rect(v, dy);
         surf_rect strip = dy > 0
             ? (surf_rect){v.x, (int16_t)(v.y + v.h - ady), v.w, ady}

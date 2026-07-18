@@ -183,6 +183,33 @@ static void test_fast_scrollview(void)
        rect_eq(surf_g.dirty.r[0], (surf_rect){10, 20, 100, 20}));
     surf_tick();
 
+    /* two shifts landing in ONE tick: the first exposure strip must ride
+     * the second shift or a stale band tears into view */
+    surf_scrollview_set_offset(sv, 0, 0);
+    surf_tick();
+    surf_inject_touch(&(surf_touch){50, 100, SURF_TOUCH_DOWN});
+    nops = 0;
+    surf_inject_touch(&(surf_touch){50, 90, SURF_TOUCH_MOVE});  /* +10 px */
+    surf_inject_touch(&(surf_touch){50, 82, SURF_TOUCH_MOVE});  /* +8 px */
+    {
+        int shifts = 0;
+        for (int i = 0; i < nops; i++)
+            if (ops[i].op == 'S')
+                shifts++;
+        OK(shifts == 2);
+        /* the union of both exposures — the bottom 18px — must be dirty
+         * before compose runs, or the moved first strip never repaints */
+        surf_rect need = {10, (int16_t)(20 + 100 - 18), 100, 18};
+        bool covered = false;
+        for (int i = 0; i < surf_g.dirty.n && !covered; i++)
+            covered = surf_rect_covers(surf_g.dirty.r[i], need);
+        OK(covered);
+    }
+    surf_inject_touch(&(surf_touch){50, 82, SURF_TOUCH_UP});
+    surf_tick();
+    while (surf_g.nscrollers > 0)
+        surf_tick();
+
     /* a drag through real dispatch also rides the shift path */
     nops = 0;
     drag(50, 100, 50, 60, 4);

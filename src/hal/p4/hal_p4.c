@@ -39,6 +39,7 @@ static struct {
     esp_async_fbcpy_handle_t fbcpy;
     SemaphoreHandle_t    fbcpy_sem;
     bool                 scrolled;  /* force a full damage-forward at present */
+    int32_t              shift_acc; /* net scroll_rect shift since last present */
     /* touch edge state */
     bool                 was_down;
     int16_t              last_x, last_y;
@@ -285,6 +286,7 @@ static void h_present(const surf_rect *dirty, int n)
         /* scroll_rect moved pixels outside the damage system's view:
          * bring the new back buffer fully current in one copy */
         S.scrolled = false;
+        S.shift_acc = 0;
         surf_rect full = {0, 0, S.cfg.w, S.cfg.h};
         fwd_copy(newest, S.back, full);
         INVALIDATE_BAND(0, S.cfg.h);
@@ -414,12 +416,47 @@ static void shift_strip(surf_rect src, int16_t dst_y)
         xSemaphoreTake(S.fbcpy_sem, portMAX_DELAY);
 }
 
-/* Shift pixels inside r by dy (content up when dy > 0) with DMA2D. Up
- * shifts are raster-safe in one pass (dst rows precede src rows); down
- * shifts go bottom-up in |dy|-tall strips so nothing reads its own
- * output. Afterwards the CPU cache over the band is written back and
- * invalidated: the DMA changed physical memory, and a later partial
- * cell write must not merge against stale cached lines. */
+/* one DMA2D copy from an arbitrary source buffer into the back buffer */
+static void cross_copy(void *src_buf, surf_rect src, int16_t dst_x, int16_t dst_y)
+{
+    esp_async_fbcpy_trans_desc_t t = {
+        .src_buffer = src_buf,
+        .dst_buffer = S.fb,
+        .src_buffer_size_x = (size_t)S.cfg.w,
+        .src_buffer_size_y = (size_t)S.cfg.h,
+        .dst_buffer_size_x = (size_t)S.cfg.w,
+        .dst_buffer_size_y = (size_t)S.cfg.h,
+        .src_offset_x = (size_t)src.x,
+        .src_offset_y = (size_t)src.y,
+        .dst_offset_x = (size_t)dst_x,
+        .dst_offset_y = (size_t)dst_y,
+        .copy_size_x = (size_t)src.w,
+        .copy_size_y = (size_t)src.h,
+        .pixel_format_unique_id = {
+            .color_type_id = COLOR_TYPE_ID(COLOR_SPACE_RGB, COLOR_PIXEL_RGB565),
+        },
+    };
+    if (esp_async_fbcpy(S.fbcpy, &t, fbcpy_done, S.fbcpy_sem) == ESP_OK)
+        xSemaphoreTake(S.fbcpy_sem, portMAX_DELAY);
+}
+
+/* Shift pixels inside r by dy (content up when dy > 0) with DMA2D.
+ *
+ * Triple-buffer mode: the just-presented buffer holds an identical copy
+ * of the frame the back buffer started from, so the shift is ONE
+ * non-overlapping cross-buffer copy in either direction — a downward
+ * self-copy would need |dy|-tall raster-safe strips (dozens of DMA ops
+ * for a small finger delta; that asymmetry was a visible stutter when
+ * scrolling up). Repeated shifts in a tick accumulate: each copy comes
+ * from the pristine source at the net offset, and the core translates
+ * pending dirty rects to match.
+ *
+ * Single-buffer mode: self-copy — up in one pass (dst rows precede src
+ * rows in raster order), down in |dy|-tall bottom-up strips.
+ *
+ * Afterwards the CPU cache over the band is invalidated: the DMA changed
+ * physical memory, and a later partial cell write must not merge against
+ * stale cached lines. */
 static void h_scroll_rect(surf_rect r, int16_t dy)
 {
     if (!S.fbcpy || dy == 0)
@@ -428,7 +465,23 @@ static void h_scroll_rect(surf_rect r, int16_t dy)
     if (ady >= r.h)
         return;
 
-    if (dy > 0) {
+    if (S.nfbs == 3) {
+        S.shift_acc += dy;
+        int32_t acc = S.shift_acc;
+        int32_t aacc = acc < 0 ? -acc : acc;
+        if (aacc < r.h) {
+            surf_rect src = {
+                r.x,
+                (int16_t)(r.y + (acc > 0 ? acc : 0)),
+                r.w,
+                (int16_t)(r.h - aacc),
+            };
+            cross_copy(S.cfg.scan_fbs[S.last_flip], src, r.x,
+                       (int16_t)(r.y + (acc < 0 ? -acc : 0)));
+        }
+        /* acc >= r.h: nothing survives; the accumulated dirty strips
+         * cover the whole viewport and compose repaints it */
+    } else if (dy > 0) {
         shift_strip((surf_rect){r.x, (int16_t)(r.y + ady), r.w,
                                 (int16_t)(r.h - ady)}, r.y);
     } else {
