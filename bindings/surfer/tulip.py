@@ -8,6 +8,7 @@
 #   >>> screen.add(s)
 #   >>> s.callback = lambda v: print("slider:", v)
 #   >>> s.y_pos = 200
+import io
 import sys
 import surfer
 
@@ -121,7 +122,10 @@ class Repl:
             except SyntaxError:
                 exec(src, self.g)
         except Exception as e:
-            sys.print_exception(e, self.c)
+            # sys.print_exception needs a native stream on the unix port
+            buf = io.StringIO()
+            sys.print_exception(e, buf)
+            self.c.write(buf.getvalue())
 
     def key(self, kind, text, shift):
         if kind == surfer.KEY_TEXT:
