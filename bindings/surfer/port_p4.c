@@ -199,8 +199,17 @@ static bool touch_poll(int16_t *x, int16_t *y)
     if (n > 0) {
         uint8_t p[6];
         if (gt911_read(GT911_REG_POINT, p, sizeof p) == ESP_OK) {
-            *x = (int16_t)(p[0] | (p[1] << 8));
-            *y = (int16_t)(p[2] | (p[3] << 8));
+            /* the panel is mounted 180° from the touch controller: the
+             * BSP mirrors both axes (mirror_x = mirror_y = 1) and so
+             * must we */
+            int16_t rx = (int16_t)(p[0] | (p[1] << 8));
+            int16_t ry = (int16_t)(p[2] | (p[3] << 8));
+            if (rx < 0) rx = 0;
+            if (rx >= LCD_W) rx = LCD_W - 1;
+            if (ry < 0) ry = 0;
+            if (ry >= LCD_H) ry = LCD_H - 1;
+            *x = (int16_t)(LCD_W - 1 - rx);
+            *y = (int16_t)(LCD_H - 1 - ry);
             down = true;
         }
     }

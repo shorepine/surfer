@@ -268,12 +268,26 @@ static void h_present(const surf_rect *dirty, int n)
     }
     S.fb = S.cfg.scan_fbs[S.back];
 
+    /* After DMA2D writes physical memory behind the CPU's back, resident
+     * clean cache lines over that band go stale — and a later partial
+     * cell write (typing!) would merge its 128-byte line against 2-frame
+     * old neighbors. Invalidate the copied band so the CPU refetches. */
+    #define INVALIDATE_BAND(y0, y1) do {                                     \
+            uintptr_t lo_ = (uintptr_t)S.fb + (uintptr_t)(y0) * S.cfg.w * 2; \
+            uintptr_t hi_ = (uintptr_t)S.fb + (uintptr_t)(y1) * S.cfg.w * 2; \
+            lo_ &= ~(uintptr_t)(P4_ALIGN - 1);                               \
+            hi_ = (hi_ + P4_ALIGN - 1) & ~(uintptr_t)(P4_ALIGN - 1);         \
+            esp_cache_msync((void *)lo_, hi_ - lo_,                          \
+                            ESP_CACHE_MSYNC_FLAG_DIR_M2C);                   \
+        } while (0)
+
     if (S.scrolled) {
         /* scroll_rect moved pixels outside the damage system's view:
          * bring the new back buffer fully current in one copy */
         S.scrolled = false;
         surf_rect full = {0, 0, S.cfg.w, S.cfg.h};
         fwd_copy(newest, S.back, full);
+        INVALIDATE_BAND(0, S.cfg.h);
         S.prev_n = 1;
         S.prev_r[0] = full;
         return;
@@ -281,6 +295,7 @@ static void h_present(const surf_rect *dirty, int n)
 
     /* previous-frame damage already inside this frame's rects is about to
      * be copied anyway — steady-state animation makes that the whole list */
+    int cminy = S.cfg.h, cmaxy = 0;
     for (int i = 0; i < S.prev_n; i++) {
         const surf_rect p = S.prev_r[i];
         bool covered = false;
@@ -288,11 +303,20 @@ static void h_present(const surf_rect *dirty, int n)
             covered = dirty[j].x <= p.x && dirty[j].y <= p.y &&
                       dirty[j].x + dirty[j].w >= p.x + p.w &&
                       dirty[j].y + dirty[j].h >= p.y + p.h;
-        if (!covered)
+        if (!covered) {
             fwd_copy(newest, S.back, p);
+            if (p.y < cminy) cminy = p.y;
+            if (p.y + p.h > cmaxy) cmaxy = p.y + p.h;
+        }
     }
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < n; i++) {
         fwd_copy(newest, S.back, dirty[i]);
+        if (dirty[i].y < cminy) cminy = dirty[i].y;
+        if (dirty[i].y + dirty[i].h > cmaxy) cmaxy = dirty[i].y + dirty[i].h;
+    }
+    if (cmaxy > cminy)
+        INVALIDATE_BAND(cminy, cmaxy);
+    #undef INVALIDATE_BAND
 
     S.prev_n = n < SURF_MAX_DIRTY_P4 ? n : SURF_MAX_DIRTY_P4;
     for (int i = 0; i < S.prev_n; i++)
