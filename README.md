@@ -36,7 +36,8 @@ threshold; slider and knob drags are never stolen.*
 
 *M5, "tulip mode": a MicroPython REPL rendered into a surfer textgrid,
 with widgets created live from typed Python — `s = surfer.slider(x, y)`,
-`screen.add(s)`, `s.callback = fn`. Hand-written binding, unix port.*
+`screen.add(s)`, `s.callback = fn`. Hand-written binding, unix port.
+The Python API is documented in [docs/python-api.md](docs/python-api.md).*
 
 ## The idea
 
