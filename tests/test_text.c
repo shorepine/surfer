@@ -19,6 +19,8 @@ static surf_glyph tg_all[3 + 26 + 1];
 static surf_kern tkerns[] = {{'A', 'V', -2}};
 surf_font tfont;  /* shared with test_scroll.c's dropdown tests */
 
+static uint8_t tatlas[256 * 16];  /* real backing so the grid can read it */
+
 static void mkfont(void)
 {
     tg_all[0] = tglyphs[0];
@@ -28,8 +30,9 @@ static void mkfont(void)
         tg_all[3 + i] = (surf_glyph){(uint32_t)('A' + i), (int16_t)(i * 8), 0,
                                      8, 10, 1, -10, 10};
     tg_all[29] = (surf_glyph){0x2026, 208, 0, 10, 4, 1, -4, 12};
+    memset(tatlas, 0x80, sizeof tatlas);
     tfont = (surf_font){
-        .atlas = {.pixels = (void *)tg_all, .w = 256, .h = 16, .stride = 256,
+        .atlas = {.pixels = tatlas, .w = 256, .h = 16, .stride = 256,
                   .format = SURF_FMT_A8},
         .ascent = 12, .descent = -3, .line_gap = 1,
         .glyphs = tg_all, .nglyphs = 30,

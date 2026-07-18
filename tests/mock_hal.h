@@ -20,6 +20,8 @@ extern mock_op ops[512];
 extern int     nops;
 extern const surf_hal mock_hal;
 extern int     test_checks, test_failures;
+extern uint16_t mock_fb[512 * 512];  /* fb_ptr target; stride = init width */
+extern int16_t  mock_w, mock_h;
 
 void mock_push_touch(surf_touch t);
 void fresh(int16_t w, int16_t h, int max_nodes);  /* re-init, drain, clear ops */

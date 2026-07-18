@@ -250,3 +250,20 @@ its own task, only `present`/PPA waits move, not callbacks.)
    compositor simple — the hal op exists, nothing uses it yet.
 5. **License.** DECIDED: MIT (stb is public domain/MIT), chosen at first
    public push.
+
+6. **Fast text (textgrid) — decided by arithmetic from the M2 numbers.**
+   A code editor at 1024×600/16px mono is ~2,500–5,400 glyphs, and every
+   scroll damages all of them. At the PPA's measured ~85µs-per-op floor
+   that is 0.2–0.46 s of blits per frame — the per-glyph atlas path can
+   never scroll a full screen of text. The fix is `surf_textgrid`: a
+   cols×rows grid of opaque cells (codepoint + fg + bg) that the CPU
+   composes directly into the framebuffer through the optional `fb_ptr`
+   hal op. Opaque cells are pure writes (no fb reads), so a full page is
+   ~1.2 MB ≈ 15–20 ms predicted on the P4 (~50–60 fps page scroll),
+   sub-ms for single-line edits; desktop measures 0.35 ms. This is the
+   sanctioned exception to "no per-pixel code outside the hal": the
+   textgrid composer in `src/text/textgrid.c` is per-pixel core code,
+   justified the same way the M2 asset rules were — by measurement. The
+   proportional label/textinput path is unchanged and remains right for
+   UI text. (On-device number pending the next hardware session; the hal
+   keeps cache sync correct by msyncing the presented band at flip.)

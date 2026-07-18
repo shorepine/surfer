@@ -179,6 +179,12 @@ static bool h_poll_touch(surf_touch *out)
     return true;
 }
 
+static void *h_fb_ptr(int32_t *stride_bytes)
+{
+    *stride_bytes = S.w * 2;
+    return S.fb;
+}
+
 static void *h_alloc_image(size_t bytes)
 {
     void *p = NULL;
@@ -203,6 +209,7 @@ static const surf_hal hal_sdl = {
     .poll_touch = h_poll_touch,
     .alloc_image = h_alloc_image,
     .free_image = h_free_image,
+    .fb_ptr = h_fb_ptr,
 };
 
 /* ---- host glue ---- */
@@ -287,6 +294,10 @@ bool surf_hal_sdl_pump(void)
             case SDLK_ESCAPE:    return false;
             case SDLK_LEFT:      push_key(SURF_KEY_LEFT, shift, NULL); break;
             case SDLK_RIGHT:     push_key(SURF_KEY_RIGHT, shift, NULL); break;
+            case SDLK_UP:        push_key(SURF_KEY_UP, shift, NULL); break;
+            case SDLK_DOWN:      push_key(SURF_KEY_DOWN, shift, NULL); break;
+            case SDLK_PAGEUP:    push_key(SURF_KEY_PGUP, shift, NULL); break;
+            case SDLK_PAGEDOWN:  push_key(SURF_KEY_PGDN, shift, NULL); break;
             case SDLK_HOME:      push_key(SURF_KEY_HOME, shift, NULL); break;
             case SDLK_END:       push_key(SURF_KEY_END, shift, NULL); break;
             case SDLK_BACKSPACE: push_key(SURF_KEY_BACKSPACE, shift, NULL); break;

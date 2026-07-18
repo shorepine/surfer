@@ -16,6 +16,10 @@ typedef enum {
     SURF_KEY_TEXT = 0,   /* utf8[] holds the typed text */
     SURF_KEY_LEFT,
     SURF_KEY_RIGHT,
+    SURF_KEY_UP,
+    SURF_KEY_DOWN,
+    SURF_KEY_PGUP,
+    SURF_KEY_PGDN,
     SURF_KEY_HOME,
     SURF_KEY_END,
     SURF_KEY_BACKSPACE,

@@ -1,10 +1,13 @@
 #include <stdlib.h>
+#include <string.h>
 
 #include "mock_hal.h"
 
 mock_op ops[512];
 int     nops;
 int     test_checks, test_failures;
+uint16_t mock_fb[512 * 512];
+int16_t  mock_w, mock_h;
 
 static surf_touch tq[64];
 static int tq_r, tq_w;
@@ -44,10 +47,16 @@ static bool m_poll_touch(surf_touch *out)
 }
 static void *m_alloc_image(size_t b) { return malloc(b); }
 static void m_free_image(void *p) { free(p); }
+static void *m_fb_ptr(int32_t *stride)
+{
+    *stride = mock_w * 2;
+    return mock_fb;
+}
 
 const surf_hal mock_hal = {
     m_fill, m_blit, m_blend, m_scale_blit, m_present,
     m_wait_idle, m_now_us, m_poll_touch, m_alloc_image, m_free_image,
+    m_fb_ptr,
 };
 
 void mock_push_touch(surf_touch t)
@@ -64,6 +73,9 @@ void fresh(int16_t w, int16_t h, int max_nodes)
 {
     surf_deinit();
     tq_r = tq_w = 0;
+    mock_w = w;
+    mock_h = h;
+    memset(mock_fb, 0, sizeof mock_fb);
     surf_config cfg = {.max_nodes = max_nodes, .bg = SURF_RGB(0, 0, 0)};
     surf_init(&mock_hal, w, h, &cfg);
     surf_tick();  /* consume the initial full-screen damage */

@@ -16,7 +16,8 @@ GEN_DIR := build/gen
 
 .PHONY: sdl test clean
 
-sdl: build/surfer_demo build/surfer_settings build/surfer_type build/surfer_bounce
+sdl: build/surfer_demo build/surfer_settings build/surfer_type build/surfer_editor \
+	build/surfer_bounce
 
 test: build/surfer_test
 	./build/surfer_test
@@ -41,6 +42,11 @@ $(GEN_DIR)/font_ui28.h: build/tools/fontbake assets/fonts/Roboto-Regular.ttf
 	@mkdir -p $(GEN_DIR)
 	build/tools/fontbake ui28 28 assets/fonts/Roboto-Regular.ttf $@
 
+$(GEN_DIR)/font_mono16.h: build/tools/fontbake assets/fonts/JetBrainsMono-Regular.ttf
+	@mkdir -p $(GEN_DIR)
+	build/tools/fontbake mono16 16 assets/fonts/JetBrainsMono-Regular.ttf $@ \
+		"32-126,167,181,8230"
+
 # the "desktop demo" tracks the current milestone: mixer (M1) + text labels (M3)
 build/surfer_demo: $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) demos/mixer.c \
 		$(GEN_DIR)/widget_assets.h $(GEN_DIR)/font_ui16.h $(GEN_DIR)/font_ui28.h $(HDRS)
@@ -59,6 +65,12 @@ build/surfer_settings: $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) demos/settings.c 
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -I$(GEN_DIR) \
 		-o $@ $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) demos/settings.c $(SDL_LIBS) -lm
+
+build/surfer_editor: $(CORE_SRCS) $(SDL_SRCS) demos/editor.c \
+		$(GEN_DIR)/font_mono16.h $(HDRS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -I$(GEN_DIR) \
+		-o $@ $(CORE_SRCS) $(SDL_SRCS) demos/editor.c $(SDL_LIBS) -lm
 
 build/surfer_bounce: $(CORE_SRCS) $(SDL_SRCS) demos/bounce.c \
 		$(GEN_DIR)/bounce_assets.h $(HDRS)

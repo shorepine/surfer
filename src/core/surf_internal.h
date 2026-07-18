@@ -16,7 +16,13 @@ enum {
     SURF_NODE_TEXT,
     SURF_NODE_TEXTINPUT,
     SURF_NODE_SCROLLVIEW,
+    SURF_NODE_TEXTGRID,
 };
+
+typedef struct {
+    uint32_t   cp;
+    surf_color fg, bg;
+} surf_textcell;
 
 enum {
     SURF_NF_HIDDEN = 1u << 0,
@@ -73,6 +79,13 @@ struct surf_node {
             int16_t down_x, down_y, last_x, last_y;
             bool    dragging;
         } scroll;
+        struct {
+            const surf_font *font;
+            surf_textcell   *cells;  /* malloc, cols*rows */
+            int16_t          cols, rows;
+            int16_t          cell_w, cell_h;
+            surf_color       fg, bg;
+        } grid;
     } u;
 };
 
@@ -169,6 +182,7 @@ void surf_glyph_blit(const surf_image *img, const surf_glyph *g,
                      int16_t dx, int16_t dy, surf_rect vis);
 void surf_text_paint(const surf_paint_ent *e);       /* label */
 void surf_textinput_paint(const surf_paint_ent *e);
-void surf_text_free_storage(surf_node *n);           /* both text types */
+void surf_textgrid_paint(const surf_paint_ent *e);
+void surf_text_free_storage(surf_node *n);           /* all text types */
 
 #endif /* SURF_INTERNAL_H */

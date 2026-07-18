@@ -326,6 +326,15 @@ static bool h_poll_touch(surf_touch *out)
     return false;
 }
 
+/* CPU access to the current back buffer for the textgrid fast path. The
+ * present flip's draw_bitmap msyncs the presented band, so CPU-written
+ * cells reach physical memory before scanout or DMA2D read them. */
+static void *h_fb_ptr(int32_t *stride_bytes)
+{
+    *stride_bytes = S.cfg.w * 2;
+    return S.fb;
+}
+
 static void *h_alloc_image(size_t bytes)
 {
     return heap_caps_aligned_alloc(P4_ALIGN, (bytes + P4_ALIGN - 1) & ~(size_t)(P4_ALIGN - 1),
@@ -354,6 +363,7 @@ static const surf_hal hal_p4 = {
     .poll_touch = h_poll_touch,
     .alloc_image = h_alloc_image,
     .free_image = h_free_image,
+    .fb_ptr = h_fb_ptr,
 };
 
 const surf_hal *surf_hal_p4_init(const surf_hal_p4_cfg *cfg)

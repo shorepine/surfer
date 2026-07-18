@@ -54,6 +54,12 @@ typedef struct {
     bool (*poll_touch)(surf_touch *out);
     void *(*alloc_image)(size_t bytes);  /* 64-byte aligned */
     void (*free_image)(void *p);
+    /* Optional (may be NULL): CPU pointer to the current RGB565 compose
+     * target. Exists for exactly one caller — the textgrid fast path —
+     * because the PPA's ~85µs-per-op floor makes per-glyph blits ~15×
+     * too slow for full-screen text (see DESIGN.md §5.6). The hal owns
+     * any cache sync of CPU-written regions at present time. */
+    void *(*fb_ptr)(int32_t *stride_bytes);
 } surf_hal;
 
 typedef struct surf_node surf_node;
@@ -176,6 +182,21 @@ void        surf_textinput_set_caret(surf_node *n, int32_t byte_idx, bool extend
 void        surf_textinput_move(surf_node *n, int32_t delta_cp, bool extend);
 int32_t     surf_textinput_index_from_x(const surf_node *n, int16_t local_x);
 void        surf_textinput_set_focused(surf_node *n, bool focused);
+
+/* textgrid: the fast fixed-width text mode (terminals, code editors).
+ * A cols×rows grid of opaque cells (codepoint + fg + bg), composed by
+ * the CPU straight into the framebuffer — full-screen text scrolls at
+ * frame rate where per-glyph blits cannot (DESIGN.md §5.6). Requires a
+ * monospaced font; the cell is sized from 'M'. */
+surf_node *surf_textgrid_new(const surf_font *f, int16_t cols, int16_t rows,
+                             surf_color fg, surf_color bg);
+void surf_textgrid_set_cell(surf_node *n, int16_t col, int16_t row, uint32_t cp,
+                            surf_color fg, surf_color bg);
+/* fill a row from UTF-8 in the default colors, space-padded to the edge */
+void surf_textgrid_set_row(surf_node *n, int16_t row, const char *utf8);
+/* positive = content moves up; exposed rows are blanked */
+void surf_textgrid_scroll(surf_node *n, int16_t dy_rows);
+surf_point surf_textgrid_cell_size(const surf_node *n);
 
 typedef struct {
     const surf_image *strip;  /* 2 frames: unchecked, checked */

@@ -13,6 +13,7 @@ idf_component_register(
         ${SURFER_ROOT}/src/text/font.c
         ${SURFER_ROOT}/src/text/label.c
         ${SURFER_ROOT}/src/text/textinput.c
+        ${SURFER_ROOT}/src/text/textgrid.c
         ${SURFER_ROOT}/src/widgets/knob.c
         ${SURFER_ROOT}/src/widgets/slider.c
         ${SURFER_ROOT}/src/widgets/checkbox.c

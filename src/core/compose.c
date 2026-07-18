@@ -14,6 +14,7 @@ static bool node_opaque(const surf_node *n)
     case SURF_NODE_SPRITE:    return n->u.sprite.img->opaque;
     case SURF_NODE_FILMSTRIP: return n->u.strip.img->opaque;
     case SURF_NODE_NINEPATCH: return n->u.nine.img->opaque;
+    case SURF_NODE_TEXTGRID:  return true;  /* bg+glyph fills every pixel */
     default:                  return false;
     }
 }
@@ -136,6 +137,9 @@ static void paint(const surf_paint_ent *e)
         return;
     case SURF_NODE_TEXTINPUT:
         surf_textinput_paint(e);
+        return;
+    case SURF_NODE_TEXTGRID:
+        surf_textgrid_paint(e);
         return;
     }
 }

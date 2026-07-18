@@ -138,5 +138,8 @@ void surf_text_free_storage(surf_node *n)
     } else if (n->type == SURF_NODE_TEXTINPUT) {
         free(n->u.input.buf);
         n->u.input.buf = NULL;
+    } else if (n->type == SURF_NODE_TEXTGRID) {
+        free(n->u.grid.cells);
+        n->u.grid.cells = NULL;
     }
 }

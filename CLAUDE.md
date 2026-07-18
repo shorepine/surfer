@@ -9,7 +9,10 @@ ask rather than silently diverging.
 
 - **No per-pixel software loops in the frame path.** The frame path is
   fill/blit/blend via the hal only. Per-pixel code is allowed exclusively
-  inside `src/hal/sdl/` (desktop software blend) and in build-time tools.
+  inside `src/hal/sdl/` (desktop software blend), in build-time tools, and
+  in the textgrid cell composer (`src/text/textgrid.c`) — the measured
+  exception: the PPA's ~85µs/op floor makes per-glyph blits unusable for
+  full-screen text (DESIGN.md §5.6).
 - **No runtime vector rasterization.** Widget visuals are pre-rendered assets
   (filmstrips, 9-slice, baked font atlases). If a widget "needs" runtime
   drawing, the answer is a better asset, not a rasterizer.
