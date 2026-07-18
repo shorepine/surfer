@@ -222,6 +222,14 @@ static mp_obj_t node_grid_scroll(mp_obj_t self_in, mp_obj_t rows)
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(node_grid_scroll_obj, node_grid_scroll);
 
+static mp_obj_t node_scroll_offset(mp_obj_t self_in)
+{
+    surf_point p = surf_scrollview_offset(node_of(self_in));
+    mp_obj_t t[2] = {MP_OBJ_NEW_SMALL_INT(p.x), MP_OBJ_NEW_SMALL_INT(p.y)};
+    return mp_obj_new_tuple(2, t);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(node_scroll_offset_obj, node_scroll_offset);
+
 static mp_obj_t node_scroll_to(mp_obj_t self_in, mp_obj_t x, mp_obj_t y)
 {
     surf_scrollview_set_offset(node_of(self_in), mp_obj_get_int(x),
@@ -240,6 +248,7 @@ static const mp_rom_map_elem_t node_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_set_cell), MP_ROM_PTR(&node_set_cell_obj)},
     {MP_ROM_QSTR(MP_QSTR_grid_scroll), MP_ROM_PTR(&node_grid_scroll_obj)},
     {MP_ROM_QSTR(MP_QSTR_scroll_to), MP_ROM_PTR(&node_scroll_to_obj)},
+    {MP_ROM_QSTR(MP_QSTR_scroll_offset), MP_ROM_PTR(&node_scroll_offset_obj)},
 };
 static MP_DEFINE_CONST_DICT(node_locals_dict, node_locals_table);
 

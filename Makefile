@@ -102,6 +102,9 @@ gen: $(GEN_DIR)/widget_assets.h $(GEN_DIR)/font_ui16.h $(GEN_DIR)/font_ui28.h \
 MPY_DIR ?= $(HOME)/micropython
 
 mpy: build/libsurfer.a gen
+	@# MP only knows libsurfer.a as a linker flag, not a dependency —
+	@# drop the binary so a changed lib always relinks
+	rm -f $(MPY_DIR)/ports/unix/build-standard/micropython
 	$(MAKE) -C $(MPY_DIR)/ports/unix USER_C_MODULES=$(abspath bindings) \
 		SURFER_DIR=$(abspath .) \
 		CFLAGS_EXTRA="-Wno-gnu-folding-constant"  # newer clang vs MP v1.26
