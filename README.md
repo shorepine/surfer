@@ -4,8 +4,9 @@
 
 surfer is a small retained-mode UI compositor: C11 core, backends for the
 ESP32-P4 (MIPI DSI + PPA), desktop (SDL2), and — later — web (emscripten).
-MicroPython bindings are on the roadmap. It's being built as the next
-generation UI for [Tulip](https://tulip.computer).
+It is meant to be set up at runtime in Python or Micropython on MCUs, the web or desktop.
+
+Our goal is to get 60FPS iOS-style low latency widget control on an MCU. It's being considered as the next generation UI for [Tulip](https://tulip.computer).
 
 > ⚠️ **Early days.** This is an architecture experiment with working code and
 > real measurements, not a finished library. The API will change. We're
