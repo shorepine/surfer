@@ -68,6 +68,8 @@ Type-specific methods (error on the wrong node type):
 
 ```python
 label.set_text("new text")
+label.set_wrap(120)                     # wrap box width (0 = single line)
+label.set_align(surfer.ALIGN_CENTER)    # ALIGN_LEFT / CENTER / RIGHT
 rect.set_color(surfer.rgb(230, 150, 60))
 
 grid.set_row(row, "text")               # fill a row, space-padded, default colors

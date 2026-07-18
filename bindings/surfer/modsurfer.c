@@ -208,6 +208,20 @@ static mp_obj_t node_set_cell(size_t n_args, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(node_set_cell_obj, 4, 6, node_set_cell);
 
+static mp_obj_t node_set_wrap(mp_obj_t self_in, mp_obj_t w)
+{
+    surf_text_set_wrap(node_of(self_in), (int16_t)mp_obj_get_int(w));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(node_set_wrap_obj, node_set_wrap);
+
+static mp_obj_t node_set_align(mp_obj_t self_in, mp_obj_t a)
+{
+    surf_text_set_align(node_of(self_in), (surf_align)mp_obj_get_int(a));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(node_set_align_obj, node_set_align);
+
 static mp_obj_t node_set_color(mp_obj_t self_in, mp_obj_t c)
 {
     surf_rect_set_color(node_of(self_in), (surf_color)mp_obj_get_int(c));
@@ -244,6 +258,8 @@ static const mp_rom_map_elem_t node_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_destroy), MP_ROM_PTR(&node_destroy_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_text), MP_ROM_PTR(&node_set_text_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_color), MP_ROM_PTR(&node_set_color_obj)},
+    {MP_ROM_QSTR(MP_QSTR_set_wrap), MP_ROM_PTR(&node_set_wrap_obj)},
+    {MP_ROM_QSTR(MP_QSTR_set_align), MP_ROM_PTR(&node_set_align_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_row), MP_ROM_PTR(&node_set_row_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_cell), MP_ROM_PTR(&node_set_cell_obj)},
     {MP_ROM_QSTR(MP_QSTR_grid_scroll), MP_ROM_PTR(&node_grid_scroll_obj)},
@@ -742,6 +758,9 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_FONT_UI28), MP_ROM_INT(1)},
     {MP_ROM_QSTR(MP_QSTR_FONT_MONO16), MP_ROM_INT(2)},
     /* touch phases */
+    {MP_ROM_QSTR(MP_QSTR_ALIGN_LEFT), MP_ROM_INT(0)},
+    {MP_ROM_QSTR(MP_QSTR_ALIGN_CENTER), MP_ROM_INT(1)},
+    {MP_ROM_QSTR(MP_QSTR_ALIGN_RIGHT), MP_ROM_INT(2)},
     {MP_ROM_QSTR(MP_QSTR_TOUCH_DOWN), MP_ROM_INT(0)},
     {MP_ROM_QSTR(MP_QSTR_TOUCH_MOVE), MP_ROM_INT(1)},
     {MP_ROM_QSTR(MP_QSTR_TOUCH_UP), MP_ROM_INT(2)},
