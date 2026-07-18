@@ -268,13 +268,22 @@ its own task, only `present`/PPA waits move, not callbacks.)
    effective write bandwidth), and the present path must msync the
    whole CPU-written band back (another ~1.2 MB of writeback). Render
    ≈ 24 ms + msync ≈ 14 ms + DMA2D damage-forward ≈ 6 ms ≈ the
-   measured 46 ms. Single-cell edits remain sub-ms. Two known paths to
-   ~60 fps scrolling if a device code editor matters: (a) scroll-blit —
-   shift the framebuffer region with DMA2D and render only the exposed
-   row (~7 ms/line-scroll); (b) render rows into an internal-SRAM
-   scratch and DMA2D them into the fb, which sidesteps both the
-   write-allocate reads and the msync (the same scratch-tile pattern
-   the S3 notes propose). Neither is built yet. This is the
+   measured 46 ms. Single-cell edits remain sub-ms.
+
+   **Scroll-blit is built and measured.** The optional `scroll_rect` hal
+   op shifts pixels in place (DMA2D on the P4, memmove on desktop) and
+   the textgrid's opt-in fast-scroll mode
+   (`surf_textgrid_set_fast_scroll`) uses it: a line-scroll becomes one
+   shift + one repainted row + a cache invalidate of the band, with the
+   hal forcing a full damage-forward on scrolled frames to keep the
+   triple buffers coherent. Hardware numbers for the full-screen editor:
+   **triple-buffer 51 fps** (10.2 ms/tick; the two full-band DMA passes
+   per frame — compose shift + buffer sync — are the remaining floor)
+   and **single-buffer 91 fps** (1.9 ms/tick; no flip, no forward copy;
+   the shift races scanout but is visually clean on the EK79007 —
+   user-verified). Verdict: full-screen text apps (editor, terminal)
+   should run the hal in single-buffer mode; mixed widget UIs keep
+   triple buffering. Both are a `surf_hal_p4_cfg` flag. This is the
    sanctioned exception to "no per-pixel code outside the hal": the
    textgrid composer in `src/text/textgrid.c` is per-pixel core code,
    justified the same way the M2 asset rules were — by measurement. The

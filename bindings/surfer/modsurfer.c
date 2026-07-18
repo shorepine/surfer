@@ -229,6 +229,13 @@ static mp_obj_t node_set_color(mp_obj_t self_in, mp_obj_t c)
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(node_set_color_obj, node_set_color);
 
+static mp_obj_t node_fast_scroll(mp_obj_t self_in, mp_obj_t on)
+{
+    surf_textgrid_set_fast_scroll(node_of(self_in), mp_obj_is_true(on));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(node_fast_scroll_obj, node_fast_scroll);
+
 static mp_obj_t node_grid_scroll(mp_obj_t self_in, mp_obj_t rows)
 {
     surf_textgrid_scroll(node_of(self_in), mp_obj_get_int(rows));
@@ -263,6 +270,7 @@ static const mp_rom_map_elem_t node_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_set_row), MP_ROM_PTR(&node_set_row_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_cell), MP_ROM_PTR(&node_set_cell_obj)},
     {MP_ROM_QSTR(MP_QSTR_grid_scroll), MP_ROM_PTR(&node_grid_scroll_obj)},
+    {MP_ROM_QSTR(MP_QSTR_fast_scroll), MP_ROM_PTR(&node_fast_scroll_obj)},
     {MP_ROM_QSTR(MP_QSTR_scroll_to), MP_ROM_PTR(&node_scroll_to_obj)},
     {MP_ROM_QSTR(MP_QSTR_scroll_offset), MP_ROM_PTR(&node_scroll_offset_obj)},
 };

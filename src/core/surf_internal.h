@@ -85,6 +85,7 @@ struct surf_node {
             int16_t          cols, rows;
             int16_t          cell_w, cell_h;
             surf_color       fg, bg;
+            bool             fast;   /* hal-assisted pixel scroll */
         } grid;
     } u;
 };

@@ -60,6 +60,13 @@ typedef struct {
      * too slow for full-screen text (see DESIGN.md §5.6). The hal owns
      * any cache sync of CPU-written regions at present time. */
     void *(*fb_ptr)(int32_t *stride_bytes);
+    /* Optional (may be NULL): shift the pixels inside r vertically by
+     * dy (>0 = content moves up); the vacated dy rows are left for the
+     * caller to repaint. The hal owns cache and multi-buffer coherence.
+     * Exists for textgrid fast scrolling — measured on the P4, a full
+     * page of CPU-rendered text costs 46 ms but a DMA shift + one-row
+     * repaint fits a 60 fps budget (DESIGN.md §5.6). */
+    void (*scroll_rect)(surf_rect r, int16_t dy);
 } surf_hal;
 
 typedef struct surf_node surf_node;
@@ -203,6 +210,12 @@ void surf_textgrid_set_row(surf_node *n, int16_t row, const char *utf8);
 /* positive = content moves up; exposed rows are blanked */
 void surf_textgrid_scroll(surf_node *n, int16_t dy_rows);
 surf_point surf_textgrid_cell_size(const surf_node *n);
+/* Fast scroll (opt-in): scroll() shifts the framebuffer pixels via the
+ * hal and repaints only the exposed rows, instead of re-rendering every
+ * cell. The caller promises the grid is fully visible and unoccluded on
+ * screen (the terminal / code-editor case). Ignored when the hal has no
+ * scroll_rect. */
+void surf_textgrid_set_fast_scroll(surf_node *n, bool on);
 
 typedef struct {
     const surf_image *strip;  /* 2 frames: unchecked, checked */

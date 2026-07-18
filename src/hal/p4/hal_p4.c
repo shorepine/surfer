@@ -38,6 +38,7 @@ static struct {
     ppa_client_handle_t  fill_cl, srm_cl, blend_cl;
     esp_async_fbcpy_handle_t fbcpy;
     SemaphoreHandle_t    fbcpy_sem;
+    bool                 scrolled;  /* force a full damage-forward at present */
     /* touch edge state */
     bool                 was_down;
     int16_t              last_x, last_y;
@@ -232,13 +233,26 @@ static void fwd_copy(int src_fb, int dst_fb, surf_rect r)
  * damage forward from the newest frame before returning. */
 static void h_present(const surf_rect *dirty, int n)
 {
-    if (S.nfbs < 3 || n == 0)
+    if (n == 0)
         return;
 
     int miny = S.cfg.h, maxy = 0;
     for (int i = 0; i < n; i++) {
         if (dirty[i].y < miny) miny = dirty[i].y;
         if (dirty[i].y + dirty[i].h > maxy) maxy = dirty[i].y + dirty[i].h;
+    }
+
+    if (S.nfbs < 3) {
+        /* single-buffer direct: no flip, but CPU-written rows (textgrid)
+         * must still reach physical memory for the scanout */
+        if (S.nfbs == 1) {
+            uint8_t *band = (uint8_t *)S.fb + (int32_t)miny * S.cfg.w * 2;
+            esp_cache_msync(band, (size_t)(maxy - miny) * S.cfg.w * 2,
+                            ESP_CACHE_MSYNC_FLAG_DIR_C2M |
+                                ESP_CACHE_MSYNC_FLAG_UNALIGNED);
+        }
+        S.scrolled = false;
+        return;
     }
     esp_lcd_panel_draw_bitmap(S.cfg.panel, 0, miny, S.cfg.w, maxy,
                               S.cfg.scan_fbs[S.back]);
@@ -253,6 +267,17 @@ static void h_present(const surf_rect *dirty, int n)
         }
     }
     S.fb = S.cfg.scan_fbs[S.back];
+
+    if (S.scrolled) {
+        /* scroll_rect moved pixels outside the damage system's view:
+         * bring the new back buffer fully current in one copy */
+        S.scrolled = false;
+        surf_rect full = {0, 0, S.cfg.w, S.cfg.h};
+        fwd_copy(newest, S.back, full);
+        S.prev_n = 1;
+        S.prev_r[0] = full;
+        return;
+    }
 
     /* previous-frame damage already inside this frame's rects is about to
      * be copied anyway — steady-state animation makes that the whole list */
@@ -335,6 +360,72 @@ static void *h_fb_ptr(int32_t *stride_bytes)
     return S.fb;
 }
 
+/* helper for scroll_rect: one DMA2D strip copy inside the back buffer */
+static void shift_strip(surf_rect src, int16_t dst_y)
+{
+    esp_async_fbcpy_trans_desc_t t = {
+        .src_buffer = S.fb,
+        .dst_buffer = S.fb,
+        .src_buffer_size_x = (size_t)S.cfg.w,
+        .src_buffer_size_y = (size_t)S.cfg.h,
+        .dst_buffer_size_x = (size_t)S.cfg.w,
+        .dst_buffer_size_y = (size_t)S.cfg.h,
+        .src_offset_x = (size_t)src.x,
+        .src_offset_y = (size_t)src.y,
+        .dst_offset_x = (size_t)src.x,
+        .dst_offset_y = (size_t)dst_y,
+        .copy_size_x = (size_t)src.w,
+        .copy_size_y = (size_t)src.h,
+        .pixel_format_unique_id = {
+            .color_type_id = COLOR_TYPE_ID(COLOR_SPACE_RGB, COLOR_PIXEL_RGB565),
+        },
+    };
+    if (esp_async_fbcpy(S.fbcpy, &t, fbcpy_done, S.fbcpy_sem) == ESP_OK)
+        xSemaphoreTake(S.fbcpy_sem, portMAX_DELAY);
+}
+
+/* Shift pixels inside r by dy (content up when dy > 0) with DMA2D. Up
+ * shifts are raster-safe in one pass (dst rows precede src rows); down
+ * shifts go bottom-up in |dy|-tall strips so nothing reads its own
+ * output. Afterwards the CPU cache over the band is written back and
+ * invalidated: the DMA changed physical memory, and a later partial
+ * cell write must not merge against stale cached lines. */
+static void h_scroll_rect(surf_rect r, int16_t dy)
+{
+    if (!S.fbcpy || dy == 0)
+        return;
+    int16_t ady = dy < 0 ? (int16_t)-dy : dy;
+    if (ady >= r.h)
+        return;
+
+    if (dy > 0) {
+        shift_strip((surf_rect){r.x, (int16_t)(r.y + ady), r.w,
+                                (int16_t)(r.h - ady)}, r.y);
+    } else {
+        int32_t remaining = r.h - ady;
+        while (remaining > 0) {
+            int32_t hh = ady < remaining ? ady : remaining;
+            int32_t sy = r.y + remaining - hh;
+            shift_strip((surf_rect){r.x, (int16_t)sy, r.w, (int16_t)hh},
+                        (int16_t)(sy + ady));
+            remaining -= hh;
+        }
+    }
+
+    /* Invalidate the band (outward-aligned — M2C refuses unaligned
+     * ranges) so later partial cell writes can't merge against stale
+     * cached lines. No writeback needed first: CPU framebuffer writes
+     * happen only in compose, and the following present's draw_bitmap
+     * msyncs the damage band — by the time anyone scrolls, the cache
+     * holds no dirty framebuffer lines. */
+    uintptr_t lo = (uintptr_t)S.fb + (uintptr_t)r.y * S.cfg.w * 2;
+    uintptr_t hi = lo + (uintptr_t)r.h * S.cfg.w * 2;
+    lo &= ~(uintptr_t)(P4_ALIGN - 1);
+    hi = (hi + P4_ALIGN - 1) & ~(uintptr_t)(P4_ALIGN - 1);
+    esp_cache_msync((void *)lo, hi - lo, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    S.scrolled = true;
+}
+
 static void *h_alloc_image(size_t bytes)
 {
     return heap_caps_aligned_alloc(P4_ALIGN, (bytes + P4_ALIGN - 1) & ~(size_t)(P4_ALIGN - 1),
@@ -364,6 +455,7 @@ static const surf_hal hal_p4 = {
     .alloc_image = h_alloc_image,
     .free_image = h_free_image,
     .fb_ptr = h_fb_ptr,
+    .scroll_rect = h_scroll_rect,
 };
 
 const surf_hal *surf_hal_p4_init(const surf_hal_p4_cfg *cfg)
@@ -372,6 +464,11 @@ const surf_hal *surf_hal_p4_init(const surf_hal_p4_cfg *cfg)
         return NULL;
     S.cfg = *cfg;
     S.fb_bytes = (size_t)cfg->w * cfg->h * 2;
+    /* DMA2D rect copies back scroll_rect in every mode, and the
+     * damage-forward path in triple-buffer mode */
+    if (esp_async_fbcpy_install(&(esp_async_fbcpy_config_t){}, &S.fbcpy) != ESP_OK)
+        return NULL;
+    S.fbcpy_sem = xSemaphoreCreateBinary();
     if (!cfg->scan_fbs[0]) {  /* headless bench */
         S.nfbs = 0;
         S.fb = h_alloc_image(S.fb_bytes);
@@ -388,9 +485,6 @@ const surf_hal *surf_hal_p4_init(const surf_hal_p4_cfg *cfg)
         S.last_flip = 0;
         S.back = 1;
         S.fb = cfg->scan_fbs[1];
-        if (esp_async_fbcpy_install(&(esp_async_fbcpy_config_t){}, &S.fbcpy) != ESP_OK)
-            return NULL;
-        S.fbcpy_sem = xSemaphoreCreateBinary();
         esp_lcd_dpi_panel_event_callbacks_t cbs = {.on_refresh_done = vsync_cb};
         if (esp_lcd_dpi_panel_register_event_callbacks(cfg->panel, &cbs, NULL) != ESP_OK)
             return NULL;

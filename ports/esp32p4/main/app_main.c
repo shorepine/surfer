@@ -31,6 +31,10 @@
 /* 1 = full-screen textgrid editor scroll test (validates the CPU fast
  * text path + fb_ptr cache handling on hardware); 0 = the M2 mixer. */
 #define DEMO_EDITOR 1
+/* editor A/B: 1 = single-buffer direct (no flip/copy — fastest scroll,
+ * possible shear as the shift races scanout); 0 = triple-buffer (51fps,
+ * artifact-free) */
+#define EDITOR_SINGLE_BUFFER 1
 
 static const char *knob_names[6] = {"cutoff", "res", "env", "lfo", "mix", "vol"};
 
@@ -321,6 +325,7 @@ static void editor_scene(const surf_hal *hal, const surf_font *mono)
     surf_node_add(surf_screen(), ed_grid);
     surf_node_set_on_touch(ed_grid, ed_touch, NULL);
     surf_node_set_gesture_grab(ed_grid, true);
+    surf_textgrid_set_fast_scroll(ed_grid, true);  /* fullscreen, unoccluded */
     ed_fill_all();
 
     printf("editor up: %dx%d cells (%dx%d px each) — drag to scroll, "
@@ -407,6 +412,9 @@ void app_main(void)
         .panel = panel, .scan_fbs = {scan_fb0, scan_fb1, scan_fb2},
         .w = LCD_W, .h = LCD_H,
         .touch_poll = touch_poll,
+#if DEMO_EDITOR && EDITOR_SINGLE_BUFFER
+        .single_buffer = true,
+#endif
     };
     const surf_hal *hal = surf_hal_p4_init(&cfg);
     ESP_ERROR_CHECK(hal ? ESP_OK : ESP_FAIL);

@@ -53,10 +53,27 @@ static void *m_fb_ptr(int32_t *stride)
     return mock_fb;
 }
 
+static void m_scroll_rect(surf_rect r, int16_t dy)
+{
+    /* record as 'S' with dy in .c, and actually move the pixels so
+     * pixel-level assertions can follow a fast scroll */
+    ops[nops++] = (mock_op){.op = 'S', .r = r, .c = (surf_color)dy};
+    int16_t ady = dy < 0 ? (int16_t)-dy : dy;
+    if (dy > 0) {
+        for (int y = r.y; y < r.y + r.h - ady; y++)
+            memmove(mock_fb + y * mock_w + r.x, mock_fb + (y + ady) * mock_w + r.x,
+                    (size_t)r.w * 2);
+    } else if (dy < 0) {
+        for (int y = r.y + r.h - 1; y >= r.y + ady; y--)
+            memmove(mock_fb + y * mock_w + r.x, mock_fb + (y - ady) * mock_w + r.x,
+                    (size_t)r.w * 2);
+    }
+}
+
 const surf_hal mock_hal = {
     m_fill, m_blit, m_blend, m_scale_blit, m_present,
     m_wait_idle, m_now_us, m_poll_touch, m_alloc_image, m_free_image,
-    m_fb_ptr,
+    m_fb_ptr, m_scroll_rect,
 };
 
 void mock_push_touch(surf_touch t)

@@ -185,6 +185,23 @@ static void *h_fb_ptr(int32_t *stride_bytes)
     return S.fb;
 }
 
+static void h_scroll_rect(surf_rect r, int16_t dy)
+{
+    if (dy == 0)
+        return;
+    int16_t ady = dy < 0 ? (int16_t)-dy : dy;
+    if (ady >= r.h)
+        return;
+    size_t row_bytes = (size_t)r.w * 2;
+    if (dy > 0) {  /* content up: walk top-down */
+        for (int y = r.y; y < r.y + r.h - ady; y++)
+            memmove(S.fb + y * S.w + r.x, S.fb + (y + ady) * S.w + r.x, row_bytes);
+    } else {       /* content down: walk bottom-up */
+        for (int y = r.y + r.h - 1; y >= r.y + ady; y--)
+            memmove(S.fb + y * S.w + r.x, S.fb + (y - ady) * S.w + r.x, row_bytes);
+    }
+}
+
 static void *h_alloc_image(size_t bytes)
 {
     void *p = NULL;
@@ -210,6 +227,7 @@ static const surf_hal hal_sdl = {
     .alloc_image = h_alloc_image,
     .free_image = h_free_image,
     .fb_ptr = h_fb_ptr,
+    .scroll_rect = h_scroll_rect,
 };
 
 /* ---- host glue ---- */

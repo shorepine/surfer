@@ -94,6 +94,7 @@ int main(int argc, char **argv)
     if (!naive) {
         grid = surf_textgrid_new(&surf_font_mono16, cols, rows, fg, bg);
         surf_node_add(surf_screen(), grid);
+        surf_textgrid_set_fast_scroll(grid, true);
     } else {
         for (int r = 0; r < rows && r < 64; r++) {
             labels[r] = surf_text_new(&surf_font_mono16, "", 0,
@@ -118,6 +119,16 @@ int main(int argc, char **argv)
             glyphs_per_scroll = (long)cols * rows; /* every cell repaints */  \
     } while (0)
 
+/* single-line steps ride the fast scroll: shift + one-row repaint */
+#define STEP_LINE(dir) do {                                                   \
+        top += (dir);                                                         \
+        surf_textgrid_scroll(grid, (int16_t)(dir));                           \
+        int r = (dir) > 0 ? rows - 1 : 0;                                     \
+        surf_textgrid_set_row(grid, (int16_t)r,                               \
+                              (top + r < nlines) ? lines[top + r] : "");      \
+        glyphs_per_scroll = cols;                                             \
+    } while (0)
+
     REFRESH();
 
     long frames = 0;
@@ -133,17 +144,26 @@ int main(int argc, char **argv)
             if (k.kind == SURF_KEY_PGDN) step = rows;
             if (k.kind == SURF_KEY_PGUP) step = -rows;
             if (step) {
-                top += step;
-                if (top < 0) top = 0;
-                if (top > nlines - rows) top = nlines - rows;
-                REFRESH();
+                int nt = top + step;
+                if (nt < 0) nt = 0;
+                if (nt > nlines - rows) nt = nlines - rows;
+                if (!naive && (nt - top == 1 || nt - top == -1)) {
+                    STEP_LINE(nt - top);
+                } else if (nt != top) {
+                    top = nt;
+                    REFRESH();
+                }
             }
         }
         if (autoscroll) {
-            top += autoscroll == 2 ? rows : 1;
-            if (top > nlines - rows)
-                top = 0;
-            REFRESH();
+            if (autoscroll != 2 && !naive && top + 1 <= nlines - rows) {
+                STEP_LINE(1);
+            } else {
+                top += autoscroll == 2 ? rows : 1;
+                if (top > nlines - rows)
+                    top = 0;
+                REFRESH();
+            }
         }
 
         uint64_t t0 = hal->now_us();

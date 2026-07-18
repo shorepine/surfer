@@ -117,12 +117,39 @@ void surf_textgrid_set_row(surf_node *n, int16_t row, const char *utf8)
         damage_cells(n, lo, row, (int16_t)(hi - lo + 1), 1);
 }
 
+void surf_textgrid_set_fast_scroll(surf_node *n, bool on)
+{
+    if (is_grid(n))
+        n->u.grid.fast = on;
+}
+
+/* Fast path: the hal shifts the pixels; only the exposed rows need a
+ * repaint, so a line-scroll costs one DMA copy + one row of cells
+ * instead of a full-grid re-render (DESIGN.md §5.6). */
+static bool grid_shift_pixels(surf_node *n, int16_t dy_rows, int16_t ady)
+{
+    if (!n->u.grid.fast || !surf_g.hal->scroll_rect ||
+        ady >= n->u.grid.rows || !surf_node_attached(n) ||
+        (n->flags & SURF_NF_HIDDEN))
+        return false;
+    int16_t ax, ay;
+    surf_node_abs_pos(n, &ax, &ay);
+    surf_rect r = surf_rect_intersect(
+        (surf_rect){ax, ay, n->w, n->h},
+        (surf_rect){0, 0, surf_g.w, surf_g.h});
+    if (r.w != n->w || r.h != n->h)
+        return false;  /* partially off-screen: take the slow path */
+    surf_g.hal->scroll_rect(r, (int16_t)(dy_rows * n->u.grid.cell_h));
+    return true;
+}
+
 void surf_textgrid_scroll(surf_node *n, int16_t dy_rows)
 {
     if (!is_grid(n) || dy_rows == 0)
         return;
     int16_t rows = n->u.grid.rows, cols = n->u.grid.cols;
     int16_t ady = dy_rows < 0 ? (int16_t)-dy_rows : dy_rows;
+    bool shifted = grid_shift_pixels(n, dy_rows, ady);
     if (ady >= rows) {
         for (int32_t i = 0; i < (int32_t)cols * rows; i++)
             n->u.grid.cells[i] = (surf_textcell){' ', n->u.grid.fg, n->u.grid.bg};
@@ -137,7 +164,12 @@ void surf_textgrid_scroll(surf_node *n, int16_t dy_rows)
         for (int32_t i = 0; i < (int32_t)cols * ady; i++)
             n->u.grid.cells[i] = (surf_textcell){' ', n->u.grid.fg, n->u.grid.bg};
     }
-    surf_damage_subtree(n);
+    if (shifted) {
+        /* the hal moved the surviving pixels; repaint only the exposure */
+        damage_cells(n, 0, dy_rows > 0 ? (int16_t)(rows - ady) : 0, cols, ady);
+    } else {
+        surf_damage_subtree(n);
+    }
 }
 
 /* ---- paint ---- */

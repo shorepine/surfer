@@ -88,8 +88,54 @@ static void test_grid_pixels(void)
     surf_node_destroy(g);
 }
 
+static void test_grid_fast_scroll(void)
+{
+    fresh(400, 200, 32);
+
+    surf_node *g = surf_textgrid_new(&tfont, 10, 4, 0xffff, 0x1234);
+    surf_node_add(surf_screen(), g);
+    surf_textgrid_set_row(g, 0, "AB");
+    surf_tick();
+
+    /* without fast scroll: full-grid damage (the old behavior) */
+    surf_textgrid_scroll(g, 1);
+    OK(surf_g.dirty.n == 1 &&
+       rect_eq(surf_g.dirty.r[0], (surf_rect){0, 0, 100, 64}));
+    surf_tick();
+
+    /* fast: hal shift op + damage only the exposed bottom row */
+    surf_textgrid_set_fast_scroll(g, true);
+    nops = 0;
+    surf_textgrid_scroll(g, 1);
+    OK(nops == 1 && ops[0].op == 'S');
+    OK(rect_eq(ops[0].r, (surf_rect){0, 0, 100, 64}));
+    OK((int16_t)ops[0].c == 16);  /* one cell row in pixels */
+    OK(surf_g.dirty.n == 1 &&
+       rect_eq(surf_g.dirty.r[0], (surf_rect){0, 48, 100, 16}));
+    nops = 0;
+    surf_tick();
+    /* compose repaints only the exposed strip — no full-grid rewrite */
+    OK(nops < 30);
+
+    /* downward fast scroll damages the top row */
+    surf_textgrid_scroll(g, -1);
+    OK(surf_g.dirty.n == 1 &&
+       rect_eq(surf_g.dirty.r[0], (surf_rect){0, 0, 100, 16}));
+    surf_tick();
+
+    /* detached grids fall back to the slow (damage-free) path safely */
+    surf_node_detach(g);
+    nops = 0;
+    surf_textgrid_scroll(g, 1);
+    OK(nops == 0);
+    surf_node_add(surf_screen(), g);
+    surf_tick();
+    surf_node_destroy(g);
+}
+
 void run_grid_tests(void)
 {
     test_grid_model();
     test_grid_pixels();
+    test_grid_fast_scroll();
 }
