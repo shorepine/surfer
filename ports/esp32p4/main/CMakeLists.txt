@@ -9,11 +9,14 @@ idf_component_register(
         ${SURFER_ROOT}/src/core/compose.c
         ${SURFER_ROOT}/src/core/hit.c
         ${SURFER_ROOT}/src/core/input.c
+        ${SURFER_ROOT}/src/core/scroll.c
         ${SURFER_ROOT}/src/text/font.c
         ${SURFER_ROOT}/src/text/label.c
         ${SURFER_ROOT}/src/text/textinput.c
         ${SURFER_ROOT}/src/widgets/knob.c
         ${SURFER_ROOT}/src/widgets/slider.c
+        ${SURFER_ROOT}/src/widgets/checkbox.c
+        ${SURFER_ROOT}/src/widgets/dropdown.c
         ${SURFER_ROOT}/src/hal/p4/hal_p4.c
     INCLUDE_DIRS
         .

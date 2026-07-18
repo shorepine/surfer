@@ -68,6 +68,7 @@ surf_node *surf_textinput_new(const surf_font *f, int16_t x, int16_t y,
     n->u.input.font = f;
     n->u.input.img = f->atlas;
     n->u.input.img.tint = c;
+    n->flags |= SURF_NF_GRAB;  /* drag-select is never a scroll */
     return n;
 }
 

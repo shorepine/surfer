@@ -63,6 +63,7 @@ typedef struct surf_node surf_node;
 
 typedef void (*surf_touch_cb)(surf_node *n, const surf_touch *t, void *user);
 typedef void (*surf_change_cb)(int32_t value_q16, void *user);
+typedef void (*surf_index_cb)(int32_t index, void *user);
 
 typedef struct {
     int        max_nodes;  /* node pool size; 0 → 256 */
@@ -85,6 +86,16 @@ surf_node *surf_ninepatch_new(const surf_image *img, int16_t x, int16_t y,
                               int16_t w, int16_t h,
                               int16_t l, int16_t t, int16_t r, int16_t b);
 
+/* scrollview: a clipped group whose children draw at a content offset.
+ * Dragging inside it scrolls after an 8px threshold steals the gesture
+ * from child handlers (widgets that own drags — sliders, knobs — opt out
+ * via surf_node_set_gesture_grab). Momentum and edge spring-back run in
+ * surf_tick, in core, so every backend feels identical (DESIGN.md §2.6). */
+surf_node *surf_scrollview_new(int16_t x, int16_t y, int16_t w, int16_t h);
+void       surf_scrollview_set_offset(surf_node *sv, int16_t x, int16_t y);
+surf_point surf_scrollview_offset(const surf_node *sv);
+surf_point surf_scrollview_content_size(surf_node *sv);
+
 /* tree — detach keeps the subtree fully alive (DESIGN.md §2.2) */
 void surf_node_add(surf_node *parent, surf_node *child);
 void surf_node_detach(surf_node *child);
@@ -106,6 +117,8 @@ void surf_ninepatch_set_size(surf_node *n, int16_t w, int16_t h);
 surf_node *surf_hit_test(int16_t x, int16_t y);
 void surf_node_set_on_touch(surf_node *n, surf_touch_cb cb, void *user);
 void surf_node_abs_pos(const surf_node *n, int16_t *x, int16_t *y);
+/* grab = an enclosing scrollview may not steal this node's gestures */
+void surf_node_set_gesture_grab(surf_node *n, bool grab);
 
 /* ---- text: atlases baked at build time by tools/fontbake.c ---- */
 
@@ -163,6 +176,43 @@ void        surf_textinput_set_caret(surf_node *n, int32_t byte_idx, bool extend
 void        surf_textinput_move(surf_node *n, int32_t delta_cp, bool extend);
 int32_t     surf_textinput_index_from_x(const surf_node *n, int16_t local_x);
 void        surf_textinput_set_focused(surf_node *n, bool focused);
+
+typedef struct {
+    const surf_image *strip;  /* 2 frames: unchecked, checked */
+    int16_t           frame_w, frame_h;
+} surf_checkbox_style;
+
+typedef struct surf_checkbox surf_checkbox;
+
+surf_checkbox *surf_checkbox_new(surf_node *parent, int16_t x, int16_t y,
+                                 const surf_checkbox_style *style);
+void       surf_checkbox_destroy(surf_checkbox *c);
+surf_node *surf_checkbox_node(surf_checkbox *c);
+bool       surf_checkbox_checked(const surf_checkbox *c);
+void       surf_checkbox_set_checked(surf_checkbox *c, bool on);  /* no cb */
+void       surf_checkbox_on_change(surf_checkbox *c, surf_change_cb cb, void *user);
+
+typedef struct {
+    const surf_image *panel;   /* 9-patch for the box and the popup */
+    int16_t           inset;
+    const surf_font  *font;
+    surf_color        text_color, hi_color;
+    const surf_image *arrow;   /* 2-frame strip: closed, open; NULL = none */
+    int16_t           arrow_w, arrow_h;
+} surf_dropdown_style;
+
+typedef struct surf_dropdown surf_dropdown;
+
+/* The open popup attaches to the screen root so it overlays siblings —
+ * detach/reattach in action. Item strings are copied. */
+surf_dropdown *surf_dropdown_new(surf_node *parent, int16_t x, int16_t y, int16_t w,
+                                 const surf_dropdown_style *style,
+                                 const char *const *items, int32_t nitems);
+void       surf_dropdown_destroy(surf_dropdown *d);
+surf_node *surf_dropdown_node(surf_dropdown *d);
+int32_t    surf_dropdown_selected(const surf_dropdown *d);
+void       surf_dropdown_set_selected(surf_dropdown *d, int32_t index);  /* no cb */
+void       surf_dropdown_on_change(surf_dropdown *d, surf_index_cb cb, void *user);
 
 /* ---- widgets: built from nodes, styled by caller-owned assets ---- */
 

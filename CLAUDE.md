@@ -103,5 +103,17 @@ P4 uses PPA `PPA_BLEND_COLOR_MODE_A8` + `fg_fix_rgb_val`. Desktop
 keyboard feeds textinput via `surf_hal_sdl_poll_key` (hal-adjacent, not
 in the vtable — the device path is the M-later OSK widget).
 `build/surfer_type` is the text demo; `SURF_SHOT=x.ppm` dumps any demo's
-framebuffer. Next milestone: **M4** (see DESIGN.md §4) — scrollview +
-momentum, checkbox, dropdown.
+framebuffer.
+
+M4 done (desktop-verified): scrollview node (`src/core/scroll.c`) with
+drag/flick momentum, edge resistance + spring-back, all fixed-point in
+core ticks; damage from scrolled content translates through offsets and
+clips to ancestor boxes. Input: a scrollable scrollview captures empty-
+space drags directly, and steals a child handler's gesture after 8px of
+travel along a scrollable axis — unless the handler set
+`surf_node_set_gesture_grab` (sliders/knobs/textinput do). Groups with a
+handler + size are hittable (hot areas, scrims). Widgets: checkbox
+(2-frame filmstrip) and dropdown (popup attaches to the screen root —
+detach/reattach as overlay). `build/surfer_settings` is the M4 demo.
+Next milestone: **M5** (see DESIGN.md §4) — MicroPython bindings, M1
+demo from Python on device.

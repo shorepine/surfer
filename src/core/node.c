@@ -23,6 +23,10 @@ static void node_free(surf_node *n)
 {
     if (surf_g.capture == n)
         surf_g.capture = NULL;
+    if (surf_g.steal_sv == n)
+        surf_g.steal_sv = NULL;
+    if (n->type == SURF_NODE_SCROLLVIEW)
+        surf_scroll_forget(n);
     n->type = SURF_NODE_FREE;
     n->next = surf_g.free_list;
     surf_g.free_list = n;
@@ -79,7 +83,7 @@ void surf_tick(void)
     surf_touch t;
     while (surf_g.hal->poll_touch(&t))
         surf_input_dispatch(&t);
-    /* Animation/momentum ticks land here in later milestones. */
+    surf_scroll_tick();  /* momentum + spring-back (DESIGN.md §2.3 step 1) */
     surf_compose();
 }
 
@@ -98,6 +102,7 @@ surf_rect surf_node_subtree_bounds(const surf_node *n, int16_t px, int16_t py)
         return (surf_rect){0, 0, 0, 0};
 
     int16_t ax = (int16_t)(px + n->x), ay = (int16_t)(py + n->y);
+    /* scrollview bounds are its viewport box — content is clipped inside */
     if (n->type != SURF_NODE_GROUP)
         return (surf_rect){ax, ay, n->w, n->h};
 
@@ -109,16 +114,29 @@ surf_rect surf_node_subtree_bounds(const surf_node *n, int16_t px, int16_t py)
     return b;
 }
 
+/* Bounds walk up to the root, translating through each ancestor's offset —
+ * minus its scroll offset when it's a scrollview — and clipping to any
+ * clipped box on the way. Damage from deep inside a scrolled list lands on
+ * exactly the visible pixels it affects, or nowhere. */
 void surf_damage_subtree(const surf_node *n)
 {
     if (!surf_g.root || !surf_node_attached(n))
         return;
-    int16_t ax = 0, ay = 0;
+    surf_rect b = surf_node_subtree_bounds(n, 0, 0);
     for (const surf_node *p = n->parent; p; p = p->parent) {
-        ax = (int16_t)(ax + p->x);
-        ay = (int16_t)(ay + p->y);
+        if (surf_rect_empty(b))
+            return;
+        if (p->type == SURF_NODE_SCROLLVIEW) {
+            b.x = (int16_t)(b.x - (p->u.scroll.off_x >> 16));
+            b.y = (int16_t)(b.y - (p->u.scroll.off_y >> 16));
+            b = surf_rect_intersect(b, (surf_rect){0, 0, p->w, p->h});
+        } else if (p->flags & SURF_NF_CLIP) {
+            b = surf_rect_intersect(b, (surf_rect){0, 0, p->w, p->h});
+        }
+        b.x = (int16_t)(b.x + p->x);
+        b.y = (int16_t)(b.y + p->y);
     }
-    surf_dirty_add(&surf_g.dirty, surf_node_subtree_bounds(n, ax, ay));
+    surf_dirty_add(&surf_g.dirty, b);
 }
 
 /* ---- constructors ---- */
@@ -189,7 +207,8 @@ surf_node *surf_ninepatch_new(const surf_image *img, int16_t x, int16_t y,
 
 void surf_node_add(surf_node *parent, surf_node *child)
 {
-    if (!parent || !child || parent->type != SURF_NODE_GROUP || child->parent)
+    if (!parent || !child || child->parent ||
+        (parent->type != SURF_NODE_GROUP && parent->type != SURF_NODE_SCROLLVIEW))
         return;
     child->prev = parent->last;
     child->next = NULL;
@@ -341,7 +360,21 @@ void surf_node_abs_pos(const surf_node *n, int16_t *x, int16_t *y)
     for (; n; n = n->parent) {
         ax = (int16_t)(ax + n->x);
         ay = (int16_t)(ay + n->y);
+        if (n->parent && n->parent->type == SURF_NODE_SCROLLVIEW) {
+            ax = (int16_t)(ax - (n->parent->u.scroll.off_x >> 16));
+            ay = (int16_t)(ay - (n->parent->u.scroll.off_y >> 16));
+        }
     }
     if (x) *x = ax;
     if (y) *y = ay;
+}
+
+void surf_node_set_gesture_grab(surf_node *n, bool grab)
+{
+    if (!n)
+        return;
+    if (grab)
+        n->flags |= SURF_NF_GRAB;
+    else
+        n->flags &= (uint8_t)~SURF_NF_GRAB;
 }

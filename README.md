@@ -25,6 +25,13 @@ straight framebuffer dumps, `SURF_SHOT=x.ppm`.)*
 caret, selection, and scroll-into-view. Glyphs are stb_truetype-baked A8
 atlases; drawing text is the same clipped-blit path as everything else.*
 
+![the settings demo: scrollview, checkboxes, dropdown](docs/settings.png)
+
+*M4: a scrollable settings panel (flick momentum + edge spring-back run
+in core ticks) with checkboxes, sliders, and a dropdown whose popup
+overlays via detach/reattach. Scrolling steals taps after an 8px
+threshold; slider and knob drags are never stolen.*
+
 ## The idea
 
 At 1080p RGB565, one frame is ~4 MB. On an ESP32-P4 the framebuffer lives in
@@ -106,7 +113,7 @@ idf.py -p <port> flash monitor     # boots into a bench, then the demo
 - [x] M1 — filmstrip/9-patch nodes, knob + slider, touch capture
 - [x] M2 — P4 backend: PPA, DSI, buffering benchmark, 60 fps under finger
 - [x] M3 — text: baked font atlases, label, wrap, textinput + caret
-- [ ] M4 — scrollview + momentum, checkbox, dropdown
+- [x] M4 — scrollview + momentum, checkbox, dropdown
 - [ ] M5 — MicroPython bindings
 - [ ] M6 — web build (emscripten), real art pass, default theme
 

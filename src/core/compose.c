@@ -25,11 +25,15 @@ static bool collect(surf_node *n, int16_t px, int16_t py, surf_rect clip, surf_r
         return false;
     int16_t ax = (int16_t)(px + n->x), ay = (int16_t)(py + n->y);
 
-    if (n->type == SURF_NODE_GROUP) {
-        if (n->flags & SURF_NF_CLIP) {
+    if (n->type == SURF_NODE_GROUP || n->type == SURF_NODE_SCROLLVIEW) {
+        if (n->type == SURF_NODE_SCROLLVIEW || (n->flags & SURF_NF_CLIP)) {
             clip = surf_rect_intersect(clip, (surf_rect){ax, ay, n->w, n->h});
             if (surf_rect_empty(clip))
                 return false;
+        }
+        if (n->type == SURF_NODE_SCROLLVIEW) {
+            ax = (int16_t)(ax - (n->u.scroll.off_x >> 16));
+            ay = (int16_t)(ay - (n->u.scroll.off_y >> 16));
         }
         for (surf_node *c = n->last; c; c = c->prev)
             if (collect(c, ax, ay, clip, dr))

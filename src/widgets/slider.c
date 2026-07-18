@@ -85,6 +85,7 @@ surf_slider *surf_slider_new(surf_node *parent, int16_t x, int16_t y,
     surf_node_add(s->root, s->track);
     surf_node_add(s->root, s->cap);
     surf_node_set_on_touch(s->root, slider_touch, s);
+    surf_node_set_gesture_grab(s->root, true);  /* a slider drag is never a scroll */
     slider_apply(s);
     surf_node_add(parent, s->root);
     return s;

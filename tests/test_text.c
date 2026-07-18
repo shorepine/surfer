@@ -17,7 +17,7 @@ static surf_glyph tglyphs[] = {
 };
 static surf_glyph tg_all[3 + 26 + 1];
 static surf_kern tkerns[] = {{'A', 'V', -2}};
-static surf_font tfont;
+surf_font tfont;  /* shared with test_scroll.c's dropdown tests */
 
 static void mkfont(void)
 {

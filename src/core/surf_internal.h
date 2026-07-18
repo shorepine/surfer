@@ -15,12 +15,14 @@ enum {
     SURF_NODE_NINEPATCH,
     SURF_NODE_TEXT,
     SURF_NODE_TEXTINPUT,
+    SURF_NODE_SCROLLVIEW,
 };
 
 enum {
     SURF_NF_HIDDEN = 1u << 0,
     SURF_NF_CLIP   = 1u << 1,
     SURF_NF_FOCUS  = 1u << 2,  /* textinput: draw the caret */
+    SURF_NF_GRAB   = 1u << 3,  /* scrollview may not steal my gestures */
 };
 
 enum {
@@ -64,6 +66,13 @@ struct surf_node {
             int16_t    scroll_x;
             surf_image img;      /* atlas header copy; tint = text color */
         } input;
+        struct {
+            int32_t off_x, off_y;            /* content offset, Q16 */
+            int32_t vel_x, vel_y;            /* px/tick, Q16 */
+            int32_t drag_off_x, drag_off_y;  /* offset when the drag began */
+            int16_t down_x, down_y, last_x, last_y;
+            bool    dragging;
+        } scroll;
     } u;
 };
 
@@ -100,7 +109,11 @@ typedef struct {
     int             pool_cap;
     surf_node      *free_list;
     surf_node      *root;
-    surf_node      *capture;  /* node holding the pointer, DOWN → UP */
+    surf_node      *capture;   /* node holding the pointer, DOWN → UP */
+    surf_node      *steal_sv;  /* scrollview waiting to steal this gesture */
+    int16_t         down_x, down_y;
+    surf_node      *scrollers[8];  /* scrollviews with live momentum/spring */
+    int             nscrollers;
     surf_dirty      dirty;
     surf_paint_ent *plist;  /* pool_cap entries */
 } surf_ctx;
@@ -108,6 +121,14 @@ typedef struct {
 extern surf_ctx surf_g;
 
 void surf_input_dispatch(const surf_touch *t);
+
+/* src/core/scroll.c */
+bool surf_scroll_can_x(surf_node *sv);
+bool surf_scroll_can_y(surf_node *sv);
+void surf_scroll_begin(surf_node *sv, const surf_touch *t);
+void surf_scroll_touch(surf_node *sv, const surf_touch *t);  /* MOVE/UP */
+void surf_scroll_tick(void);                                 /* momentum/spring */
+void surf_scroll_forget(surf_node *sv);  /* node freed/detached */
 
 surf_node *surf_node_alloc(uint8_t type);  /* pool; NULL when exhausted */
 bool      surf_node_attached(const surf_node *n);

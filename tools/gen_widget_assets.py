@@ -111,6 +111,66 @@ def cap():
     return out
 
 
+CHECK = 28
+PANEL = 24
+PANEL_INSET = 8
+ARROW_W, ARROW_H = 12, 8
+
+
+def checkbox_strip():
+    out = [0] * (CHECK * 2 * CHECK)
+    for frame in range(2):
+        for y in range(CHECK):
+            for x in range(CHECK):
+                px, py = x + 0.5, y + 0.5
+                d, a = rounded_alpha(px, py, CHECK, CHECK, 6)
+                if a == 0.0:
+                    continue
+                col = (44, 47, 56)
+                if d > -2.2:
+                    col = (110, 118, 134)
+                if frame == 1:
+                    dd = min(seg_dist(px, py, 7, 14.5, 12, 19.5),
+                             seg_dist(px, py, 12, 19.5, 21, 8.5))
+                    col = mix(col, (110, 205, 160), max(0.0, min(1.0, 2.6 - dd)))
+                out[y * CHECK * 2 + frame * CHECK + x] = \
+                    (clamp(a * 255) << 24) | (col[0] << 16) | (col[1] << 8) | col[2]
+    return out
+
+
+def panel():
+    out = []
+    for y in range(PANEL):
+        for x in range(PANEL):
+            px, py = x + 0.5, y + 0.5
+            d, a = rounded_alpha(px, py, PANEL, PANEL, 6)
+            if a == 0.0:
+                out.append(0)
+                continue
+            col = (47, 51, 62)
+            if d > -1.6:
+                col = (96, 103, 120)
+            out.append((clamp(a * 255) << 24) | (col[0] << 16) | (col[1] << 8) | col[2])
+    return out
+
+
+def arrow_strip():
+    out = [0] * (ARROW_W * 2 * ARROW_H)
+    for frame in range(2):
+        for y in range(ARROW_H):
+            for x in range(ARROW_W):
+                px, py = x + 0.5, y + 0.5
+                if frame == 1:
+                    py = ARROW_H - py  # open state points up
+                # triangle: width tapers to a point at the bottom
+                half = (ARROW_W / 2.0) * (1.0 - py / ARROW_H)
+                cov = max(0.0, min(1.0, half - abs(px - ARROW_W / 2.0) + 0.5))
+                if cov > 0.0:
+                    out[y * ARROW_W * 2 + frame * ARROW_W + x] = \
+                        (clamp(cov * 255) << 24) | (186 << 16) | (192 << 8) | 204
+    return out
+
+
 def emit(name, values, per_line=12):
     # const → flash .rodata on device; RAM can't hold the big strips
     print(f"static const uint32_t {name}[{len(values)}] = {{")
@@ -130,10 +190,18 @@ def main():
     print(f"#define WTRACKFULL_H {TRACKFULL_H}")
     print(f"#define WCAP_W {CAP_W}")
     print(f"#define WCAP_H {CAP_H}")
+    print(f"#define WCHECK_SIZE {CHECK}")
+    print(f"#define WPANEL_SIZE {PANEL}")
+    print(f"#define WPANEL_INSET {PANEL_INSET}")
+    print(f"#define WARROW_W {ARROW_W}")
+    print(f"#define WARROW_H {ARROW_H}")
     emit("widget_knob_px", knob_strip())
     emit("widget_track_px", track(TRACK, TRACK))
     emit("widget_trackfull_px", track(TRACKFULL_W, TRACKFULL_H))
     emit("widget_cap_px", cap())
+    emit("widget_check_px", checkbox_strip())
+    emit("widget_panel_px", panel())
+    emit("widget_arrow_px", arrow_strip())
 
 
 if __name__ == "__main__":

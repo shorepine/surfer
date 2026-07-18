@@ -16,7 +16,7 @@ GEN_DIR := build/gen
 
 .PHONY: sdl test clean
 
-sdl: build/surfer_demo build/surfer_type build/surfer_bounce
+sdl: build/surfer_demo build/surfer_settings build/surfer_type build/surfer_bounce
 
 test: build/surfer_test
 	./build/surfer_test
@@ -53,6 +53,12 @@ build/surfer_type: $(CORE_SRCS) $(SDL_SRCS) demos/type.c \
 	@mkdir -p build
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -I$(GEN_DIR) \
 		-o $@ $(CORE_SRCS) $(SDL_SRCS) demos/type.c $(SDL_LIBS) -lm
+
+build/surfer_settings: $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) demos/settings.c \
+		$(GEN_DIR)/widget_assets.h $(GEN_DIR)/font_ui16.h $(GEN_DIR)/font_ui28.h $(HDRS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -I$(GEN_DIR) \
+		-o $@ $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) demos/settings.c $(SDL_LIBS) -lm
 
 build/surfer_bounce: $(CORE_SRCS) $(SDL_SRCS) demos/bounce.c \
 		$(GEN_DIR)/bounce_assets.h $(HDRS)

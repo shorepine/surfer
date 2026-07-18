@@ -108,6 +108,7 @@ surf_knob *surf_knob_new(surf_node *parent, int16_t x, int16_t y,
     }
     surf_node_add(k->root, k->strip);
     surf_node_set_on_touch(k->root, knob_touch, k);
+    surf_node_set_gesture_grab(k->root, true);  /* a knob drag is never a scroll */
     surf_node_add(parent, k->root);
     return k;
 }
