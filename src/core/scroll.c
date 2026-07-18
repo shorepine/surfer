@@ -50,9 +50,13 @@ void surf_scroll_forget(surf_node *sv)
             surf_g.scrollers[i] = surf_g.scrollers[--surf_g.nscrollers];
 }
 
-/* raw drag offset with resistance past the edges: half-speed overscroll */
+/* raw drag offset with resistance past the edges: half-speed overscroll.
+ * An axis with no scrollable range doesn't move at all — no rubber-band
+ * wiggle on the axis that fits (vertical lists stay vertical). */
 static int32_t resist(int32_t raw, int32_t max)
 {
+    if (max == 0)
+        return 0;
     if (raw < 0)
         return raw / 2;
     if (raw > max)
@@ -117,6 +121,11 @@ void surf_scroll_touch(surf_node *sv, const surf_touch *t)
 /* one axis of momentum/spring; returns true while still moving */
 static bool axis_tick(int32_t *off, int32_t *vel, int32_t max)
 {
+    if (max == 0) {  /* unscrollable axis: flick velocity has nowhere to go */
+        *off = 0;
+        *vel = 0;
+        return false;
+    }
     if (*off < 0 || *off > max) {
         int32_t target = *off < 0 ? 0 : max;
         *vel = 0;

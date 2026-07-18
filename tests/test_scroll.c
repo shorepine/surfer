@@ -141,6 +141,23 @@ void test_scroll_btn_handler(surf_node *n, const surf_touch *t, void *user)
     (*(int *)user)++;
 }
 
+static void test_axis_lock(void)
+{
+    fresh(200, 200, 64);
+    surf_node *sv = surf_scrollview_new(0, 0, 100, 100);
+    surf_node_add(surf_screen(), sv);
+    /* content taller than the viewport but narrower: only y scrolls */
+    surf_node_add(sv, surf_rect_new(0, 0, 80, 300, 1));
+
+    /* a diagonal drag moves y and leaves x pinned — no sideways wiggle */
+    drag(50, 80, 10, 30, 5);
+    OK(surf_scrollview_offset(sv).x == 0);
+    OK(surf_scrollview_offset(sv).y > 0);
+    while (surf_g.nscrollers > 0)
+        surf_tick();
+    OK(surf_scrollview_offset(sv).x == 0);
+}
+
 static void test_overscroll_spring(void)
 {
     fresh(200, 200, 64);
@@ -250,6 +267,7 @@ void run_scroll_tests(void)
 {
     test_scroll_compose_hit();
     test_scroll_drag_steal();
+    test_axis_lock();
     test_overscroll_spring();
     test_checkbox();
     test_dropdown();
