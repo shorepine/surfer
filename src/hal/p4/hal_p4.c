@@ -42,7 +42,7 @@ static struct {
     /* touch edge state */
     bool                 was_down;
     int16_t              last_x, last_y;
-    bool                 up_pending;
+    uint8_t              empty_reads;  /* release hysteresis counter */
 } S;
 
 static void h_fill(surf_rect dst, surf_color c)
@@ -334,17 +334,18 @@ static uint64_t h_now_us(void)
 }
 
 /* Rate-limit I2C traffic: the controller is polled at most once per 8 ms,
- * and the DOWN→UP edge is synthesized from the pressed level. */
+ * and the DOWN→UP edge is synthesized from the pressed level. Release
+ * uses hysteresis: the GT911 bounces on finger lift (a blink of "no
+ * touch" then contact again), which would synthesize a phantom second
+ * tap — toggle buttons visibly flip twice. UP is only declared after
+ * several consecutive empty polls (~25 ms); shorter gaps bridge into
+ * one continuous gesture, which also keeps drags from micro-dropping. */
+#define TOUCH_RELEASE_POLLS 3
+
 static bool h_poll_touch(surf_touch *out)
 {
     if (!S.cfg.touch_poll)
         return false;
-
-    if (S.up_pending) {
-        S.up_pending = false;
-        *out = (surf_touch){S.last_x, S.last_y, SURF_TOUCH_UP};
-        return true;
-    }
 
     static int64_t last_read;
     int64_t now = esp_timer_get_time();
@@ -354,21 +355,26 @@ static bool h_poll_touch(surf_touch *out)
 
     int16_t x, y;
     bool down = S.cfg.touch_poll(&x, &y);
-    if (down && !S.was_down) {
-        S.was_down = true;
-        S.last_x = x;
-        S.last_y = y;
-        *out = (surf_touch){x, y, SURF_TOUCH_DOWN};
-        return true;
+    if (down) {
+        S.empty_reads = 0;
+        if (!S.was_down) {
+            S.was_down = true;
+            S.last_x = x;
+            S.last_y = y;
+            *out = (surf_touch){x, y, SURF_TOUCH_DOWN};
+            return true;
+        }
+        if (x != S.last_x || y != S.last_y) {
+            S.last_x = x;
+            S.last_y = y;
+            *out = (surf_touch){x, y, SURF_TOUCH_MOVE};
+            return true;
+        }
+        return false;
     }
-    if (down && (x != S.last_x || y != S.last_y)) {
-        S.last_x = x;
-        S.last_y = y;
-        *out = (surf_touch){x, y, SURF_TOUCH_MOVE};
-        return true;
-    }
-    if (!down && S.was_down) {
+    if (S.was_down && ++S.empty_reads >= TOUCH_RELEASE_POLLS) {
         S.was_down = false;
+        S.empty_reads = 0;
         *out = (surf_touch){S.last_x, S.last_y, SURF_TOUCH_UP};
         return true;
     }
