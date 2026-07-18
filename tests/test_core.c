@@ -10,6 +10,7 @@ void run_widget_tests(void);  /* tests/test_widgets.c */
 void run_text_tests(void);    /* tests/test_text.c */
 void run_scroll_tests(void);  /* tests/test_scroll.c; needs run_text_tests first */
 void run_grid_tests(void);    /* tests/test_grid.c; needs run_text_tests first */
+void run_button_tests(void);  /* tests/test_widgets.c; needs run_text_tests first */
 
 /* ---- tests ---- */
 
@@ -240,6 +241,7 @@ int main(void)
     run_text_tests();
     run_scroll_tests();
     run_grid_tests();
+    run_button_tests();
     surf_deinit();
 
     printf("%d checks, %d failures\n", test_checks, test_failures);

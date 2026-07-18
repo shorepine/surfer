@@ -246,6 +246,43 @@ static void test_knob(void)
     OK(change_count == 0);
 }
 
+extern surf_font tfont;  /* synthetic font from test_text.c */
+
+static void test_button(void)
+{
+    fresh(200, 200, 64);
+    static surf_image np = {
+        .pixels = (void *)&np, .w = 18, .h = 18, .stride = 72,
+        .format = SURF_FMT_ARGB8888,
+    };
+    surf_button_style st = {.normal = &np, .pressed = &np, .inset = 6,
+                            .font = &tfont, .text_color = 1};
+    surf_button *b = surf_button_new(surf_screen(), 20, 20, 80, 30, &st, "GO");
+    OK(b != NULL);
+
+    static int32_t presses;
+    presses = 0;
+    extern void test_check_cb(int32_t v, void *user);  /* counts via value */
+    surf_button_on_press(b, test_check_cb, &presses);
+
+    /* press + release inside fires once */
+    mock_push_touch((surf_touch){40, 30, SURF_TOUCH_DOWN});
+    mock_push_touch((surf_touch){45, 32, SURF_TOUCH_UP});
+    surf_tick();
+    OK(presses == SURF_ONE);
+
+    /* press inside, release outside cancels */
+    presses = 0;
+    mock_push_touch((surf_touch){40, 30, SURF_TOUCH_DOWN});
+    mock_push_touch((surf_touch){150, 150, SURF_TOUCH_MOVE});
+    mock_push_touch((surf_touch){150, 150, SURF_TOUCH_UP});
+    surf_tick();
+    OK(presses == 0);
+
+    surf_button_set_label(b, "STOP");
+    surf_button_destroy(b);
+}
+
 void run_widget_tests(void)
 {
     test_filmstrip();
@@ -253,4 +290,9 @@ void run_widget_tests(void)
     test_input_capture();
     test_slider();
     test_knob();
+}
+
+void run_button_tests(void)  /* needs tfont: runs after run_text_tests */
+{
+    test_button();
 }

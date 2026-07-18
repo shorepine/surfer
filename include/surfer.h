@@ -220,6 +220,25 @@ void       surf_checkbox_set_checked(surf_checkbox *c, bool on);  /* no cb */
 void       surf_checkbox_on_change(surf_checkbox *c, surf_change_cb cb, void *user);
 
 typedef struct {
+    const surf_image *normal;  /* 9-patch, unpressed */
+    const surf_image *pressed;
+    int16_t           inset;
+    const surf_font  *font;
+    surf_color        text_color;
+} surf_button_style;
+
+typedef struct surf_button surf_button;
+
+surf_button *surf_button_new(surf_node *parent, int16_t x, int16_t y,
+                             int16_t w, int16_t h, const surf_button_style *style,
+                             const char *label);
+void       surf_button_destroy(surf_button *b);
+surf_node *surf_button_node(surf_button *b);
+void       surf_button_set_label(surf_button *b, const char *label);
+/* fires on release inside the button (value is always SURF_ONE) */
+void       surf_button_on_press(surf_button *b, surf_change_cb cb, void *user);
+
+typedef struct {
     const surf_image *panel;   /* 9-patch for the box and the popup */
     int16_t           inset;
     const surf_font  *font;

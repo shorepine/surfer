@@ -10,6 +10,7 @@ import math
 
 KNOB_FRAMES = 64
 KNOB = 64
+KNOB_SM = 40  # small knob for dense panels (drum machines etc.)
 TRACK = 36
 TRACK_INSET = 12
 TRACKFULL_W, TRACKFULL_H = 48, 330  # baked at the mixer's exact size: 1 blit
@@ -30,40 +31,70 @@ def seg_dist(px, py, ax, ay, bx, by):
     return math.hypot(px - (ax + vx * t), py - (ay + vy * t))
 
 
-def knob_strip():
-    c = KNOB / 2.0
+def knob_strip(size=KNOB):
+    c = size / 2.0
+    body_r = c - 5.0        # scale the 64px proportions down
+    edge_r = c - 0.5
+    ptr_w = max(1.8, size / 24.0)
     out = []
     frames = []
     for f in range(KNOB_FRAMES):
         ang = math.radians(-135.0 + 270.0 * f / (KNOB_FRAMES - 1))
         dx, dy = math.sin(ang), -math.cos(ang)
-        frames.append((c + dx * 8, c + dy * 8, c + dx * 22, c + dy * 22))
-    for y in range(KNOB):
+        frames.append((c + dx * size * 0.125, c + dy * size * 0.125,
+                       c + dx * size * 0.345, c + dy * size * 0.345))
+    for y in range(size):
         for f in range(KNOB_FRAMES):
             ax, ay, bx, by = frames[f]
-            for x in range(KNOB):
+            for x in range(size):
                 px, py = x + 0.5, y + 0.5
                 r = math.hypot(px - c, py - c)
-                a = max(0.0, min(1.0, (27.5 - r) * 2.0))
+                a = max(0.0, min(1.0, (edge_r - r) * 2.0))
                 if a == 0.0:
                     out.append((f, x, y, 0))
                     continue
-                if r > 23.0:
+                if r > body_r:
                     col = (58, 62, 74)
                 else:
-                    sh = 1.0 - 0.45 * (r / 23.0) ** 2
-                    hr = math.hypot((px - c) / 23.0 + 0.35, (py - c) / 23.0 + 0.35)
+                    sh = 1.0 - 0.45 * (r / body_r) ** 2
+                    hr = math.hypot((px - c) / body_r + 0.35, (py - c) / body_r + 0.35)
                     spec = max(0.0, 1.0 - hr * 1.8) ** 3 * 140.0
                     col = tuple(clamp(v * sh + spec) for v in (126, 130, 142))
                 d = seg_dist(px, py, ax, ay, bx, by)
-                col = mix(col, (240, 242, 248), max(0.0, min(1.0, 2.7 - d)))
+                col = mix(col, (240, 242, 248),
+                          max(0.0, min(1.0, ptr_w + 0.5 - d)))
                 word = (clamp(a * 255) << 24) | (col[0] << 16) | (col[1] << 8) | col[2]
                 out.append((f, x, y, word))
-    strip_w = KNOB * KNOB_FRAMES
-    px = [0] * (strip_w * KNOB)
+    strip_w = size * KNOB_FRAMES
+    px = [0] * (strip_w * size)
     for f, x, y, word in out:
-        px[y * strip_w + f * KNOB + x] = word
+        px[y * strip_w + f * size + x] = word
     return px
+
+
+def button_patch(pressed):
+    """9-patch for the button widget: raised normal, sunken pressed."""
+    size = 18
+    out = []
+    for y in range(size):
+        for x in range(size):
+            px, py = x + 0.5, y + 0.5
+            d, a = rounded_alpha(px, py, size, size, 5)
+            if a == 0.0:
+                out.append(0)
+                continue
+            if pressed:
+                col = (40, 44, 54)
+                if d > -1.6:
+                    col = (70, 76, 90)
+            else:
+                col = (68, 74, 88)
+                if py < 5:
+                    col = mix(col, (96, 103, 120), (5 - py) / 5.0)
+                if d > -1.6:
+                    col = (104, 112, 130)
+            out.append((clamp(a * 255) << 24) | (col[0] << 16) | (col[1] << 8) | col[2])
+    return out
 
 
 def rounded_alpha(px, py, w, h, radius):
@@ -195,7 +226,14 @@ def main():
     print(f"#define WPANEL_INSET {PANEL_INSET}")
     print(f"#define WARROW_W {ARROW_W}")
     print(f"#define WARROW_H {ARROW_H}")
+    print(f"#define WKNOBSM_SIZE {KNOB_SM}")
+    print(f"#define WKNOBSM_STRIP_W {KNOB_SM * KNOB_FRAMES}")
+    print("#define WBTN_SIZE 18")
+    print("#define WBTN_INSET 6")
     emit("widget_knob_px", knob_strip())
+    emit("widget_knobsm_px", knob_strip(KNOB_SM))
+    emit("widget_btn_px", button_patch(False))
+    emit("widget_btnpr_px", button_patch(True))
     emit("widget_track_px", track(TRACK, TRACK))
     emit("widget_trackfull_px", track(TRACKFULL_W, TRACKFULL_H))
     emit("widget_cap_px", cap())

@@ -25,6 +25,7 @@ target_sources(usermod_surfer INTERFACE
     ${SURFER_DIR}/src/widgets/slider.c
     ${SURFER_DIR}/src/widgets/checkbox.c
     ${SURFER_DIR}/src/widgets/dropdown.c
+    ${SURFER_DIR}/src/widgets/button.c
     ${SURFER_DIR}/src/hal/p4/hal_p4.c
 )
 

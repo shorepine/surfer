@@ -68,6 +68,7 @@ Type-specific methods (error on the wrong node type):
 
 ```python
 label.set_text("new text")
+rect.set_color(surfer.rgb(230, 150, 60))
 
 grid.set_row(row, "text")               # fill a row, space-padded, default colors
 grid.set_cell(col, row, "A", fg, bg)    # one cell; char or codepoint int
@@ -79,6 +80,18 @@ sv.scroll_to(x, y)                      # programmatic scroll (clamped)
 `detach()` + `screen().add(...)` round-trips losslessly — an app's whole
 UI is one group that a switcher detaches and reattaches.
 
+**Custom widgets** hang off any node's touch handler:
+
+```python
+pad = surfer.rect(x, y, 34, 44, color)
+pad.on_touch = lambda phase, tx, ty: ...   # TOUCH_DOWN / MOVE / UP, screen coords
+```
+
+The node captures the gesture DOWN→UP like any widget; an enclosing
+scrollview can still steal it after 8 px of travel (act on UP near the
+DOWN point for tap semantics — see the step pads in
+[examples/gamma9001.py](../bindings/surfer/examples/gamma9001.py)).
+
 ## Widgets
 
 Prebuilt controls with the default baked theme. Factories (also available
@@ -87,9 +100,10 @@ capitalized: `surfer.Slider` is `surfer.slider`):
 | factory | value type |
 |---|---|
 | `surfer.slider(x, y, w=48, h=330)` | `float` 0.0–1.0 |
-| `surfer.knob(x, y)` | `float` 0.0–1.0 (vertical drag, DAW-style) |
+| `surfer.knob(x, y, size=64)` | `float` 0.0–1.0 (vertical drag, DAW-style; `size < 52` picks the small 40px style) |
 | `surfer.checkbox(x, y)` | `bool` |
 | `surfer.dropdown(x, y, w, ["a", "b", ...])` | `int` selected index |
+| `surfer.button(x, y, w, h, label="")` | none — `.callback` fires on release inside; `.label = "..."` relabels |
 
 Every widget has the node position attributes plus:
 

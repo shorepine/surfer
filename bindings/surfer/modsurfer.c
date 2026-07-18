@@ -47,6 +47,18 @@ static surf_image panel_img = {
     .pixels = (void *)widget_panel_px, .w = WPANEL_SIZE, .h = WPANEL_SIZE,
     .stride = WPANEL_SIZE * 4, .format = SURF_FMT_ARGB8888,
 };
+static surf_image btn_img = {
+    .pixels = (void *)widget_btn_px, .w = WBTN_SIZE, .h = WBTN_SIZE,
+    .stride = WBTN_SIZE * 4, .format = SURF_FMT_ARGB8888,
+};
+static surf_image btnpr_img = {
+    .pixels = (void *)widget_btnpr_px, .w = WBTN_SIZE, .h = WBTN_SIZE,
+    .stride = WBTN_SIZE * 4, .format = SURF_FMT_ARGB8888,
+};
+static surf_image knobsm_img = {
+    .pixels = (void *)widget_knobsm_px, .w = WKNOBSM_STRIP_W, .h = WKNOBSM_SIZE,
+    .stride = WKNOBSM_STRIP_W * 4, .format = SURF_FMT_ARGB8888,
+};
 static surf_image arrow_img = {
     .pixels = (void *)widget_arrow_px, .w = WARROW_W * 2, .h = WARROW_H,
     .stride = WARROW_W * 2 * 4, .format = SURF_FMT_ARGB8888,
@@ -66,6 +78,9 @@ static void prepare_assets(void)
     surfer_port_prepare_image(&check_img);
     surfer_port_prepare_image(&panel_img);
     surfer_port_prepare_image(&arrow_img);
+    surfer_port_prepare_image(&btn_img);
+    surfer_port_prepare_image(&btnpr_img);
+    surfer_port_prepare_image(&knobsm_img);
     for (int i = 0; i < NFONTS; i++) {
         fonts_rt[i] = *fonts_baked[i];
         surfer_port_prepare_image(&fonts_rt[i].atlas);
@@ -77,9 +92,10 @@ static void prepare_assets(void)
 typedef struct {
     mp_obj_base_t base;
     surf_node *node;
+    mp_obj_t touch_cb;  /* node.on_touch: fn(phase, x, y) or None */
 } surfer_node_obj_t;
 
-enum { W_SLIDER, W_KNOB, W_CHECKBOX, W_DROPDOWN };
+enum { W_SLIDER, W_KNOB, W_CHECKBOX, W_DROPDOWN, W_BUTTON };
 
 typedef struct {
     mp_obj_base_t base;
@@ -109,6 +125,7 @@ static surfer_node_obj_t *new_node_obj(surf_node *n)
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("node pool exhausted"));
     surfer_node_obj_t *o = mp_obj_malloc(surfer_node_obj_t, &surfer_node_type);
     o->node = n;
+    o->touch_cb = mp_const_none;
     registry_add(MP_OBJ_FROM_PTR(o));
     return o;
 }
@@ -191,6 +208,13 @@ static mp_obj_t node_set_cell(size_t n_args, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(node_set_cell_obj, 4, 6, node_set_cell);
 
+static mp_obj_t node_set_color(mp_obj_t self_in, mp_obj_t c)
+{
+    surf_rect_set_color(node_of(self_in), (surf_color)mp_obj_get_int(c));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(node_set_color_obj, node_set_color);
+
 static mp_obj_t node_grid_scroll(mp_obj_t self_in, mp_obj_t rows)
 {
     surf_textgrid_scroll(node_of(self_in), mp_obj_get_int(rows));
@@ -211,6 +235,7 @@ static const mp_rom_map_elem_t node_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_detach), MP_ROM_PTR(&node_detach_obj)},
     {MP_ROM_QSTR(MP_QSTR_destroy), MP_ROM_PTR(&node_destroy_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_text), MP_ROM_PTR(&node_set_text_obj)},
+    {MP_ROM_QSTR(MP_QSTR_set_color), MP_ROM_PTR(&node_set_color_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_row), MP_ROM_PTR(&node_set_row_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_cell), MP_ROM_PTR(&node_set_cell_obj)},
     {MP_ROM_QSTR(MP_QSTR_grid_scroll), MP_ROM_PTR(&node_grid_scroll_obj)},
@@ -244,12 +269,39 @@ static void node_pos_attr(surf_node *n, qstr attr, mp_obj_t *dest,
     }
 }
 
+/* node.on_touch = fn(phase, x, y): the primitive for building custom
+ * widgets in Python (step pads, XY controls, ...). Coordinates are
+ * screen-absolute; phase is TOUCH_DOWN/MOVE/UP. */
+static void node_touch_tramp(surf_node *n, const surf_touch *t, void *user)
+{
+    (void)n;
+    surfer_node_obj_t *o = user;
+    if (o->touch_cb == mp_const_none)
+        return;
+    mp_obj_t args[3] = {
+        MP_OBJ_NEW_SMALL_INT(t->phase),
+        MP_OBJ_NEW_SMALL_INT(t->x),
+        MP_OBJ_NEW_SMALL_INT(t->y),
+    };
+    mp_call_function_n_kw(o->touch_cb, 3, 0, args);
+}
+
 static void node_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
 {
     surfer_node_obj_t *o = MP_OBJ_TO_PTR(self_in);
     if (!o->node) {
         if (dest[0] == MP_OBJ_NULL)
             dest[1] = MP_OBJ_SENTINEL;
+        return;
+    }
+    if (dest[0] == MP_OBJ_NULL && attr == MP_QSTR_on_touch) {
+        dest[0] = o->touch_cb;
+        return;
+    }
+    if (dest[0] != MP_OBJ_NULL && attr == MP_QSTR_on_touch) {
+        o->touch_cb = dest[1];
+        surf_node_set_on_touch(o->node, node_touch_tramp, o);
+        dest[0] = MP_OBJ_NULL;
         return;
     }
     surf_point p = surf_node_pos(o->node);
@@ -271,6 +323,7 @@ static void widget_cb(int32_t value, void *user)
     switch (o->kind) {
     case W_CHECKBOX: arg = mp_obj_new_bool(value != 0); break;
     case W_DROPDOWN: arg = MP_OBJ_NEW_SMALL_INT(value); break;
+    case W_BUTTON:   arg = mp_const_true; break;
     default: arg = mp_obj_new_float((mp_float_t)value / SURF_ONE); break;
     }
     mp_call_function_1(o->callback, arg);
@@ -291,6 +344,8 @@ static mp_obj_t widget_get_value(surfer_widget_obj_t *o)
         return mp_obj_new_float((mp_float_t)surf_knob_value(o->w) / SURF_ONE);
     case W_CHECKBOX:
         return mp_obj_new_bool(surf_checkbox_checked(o->w));
+    case W_BUTTON:
+        return mp_const_none;
     default:
         return MP_OBJ_NEW_SMALL_INT(surf_dropdown_selected(o->w));
     }
@@ -307,6 +362,8 @@ static void widget_set_value(surfer_widget_obj_t *o, mp_obj_t v)
         break;
     case W_CHECKBOX:
         surf_checkbox_set_checked(o->w, mp_obj_is_true(v));
+        break;
+    case W_BUTTON:
         break;
     default:
         surf_dropdown_set_selected(o->w, mp_obj_get_int(v));
@@ -339,6 +396,11 @@ static void widget_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
         }
         if (attr == MP_QSTR_callback) {
             o->callback = dest[1];
+            dest[0] = MP_OBJ_NULL;
+            return;
+        }
+        if (attr == MP_QSTR_label && o->kind == W_BUTTON) {
+            surf_button_set_label(o->w, mp_obj_str_get_str(dest[1]));
             dest[0] = MP_OBJ_NULL;
             return;
         }
@@ -514,22 +576,53 @@ static mp_obj_t mod_slider(size_t n_args, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_slider_obj, 2, 4, mod_slider);
 
-static mp_obj_t mod_knob(mp_obj_t x, mp_obj_t y)
+static mp_obj_t mod_knob(size_t n_args, const mp_obj_t *args)
 {
-    static const surf_knob_style st = {.strip = &knob_img, .frame_w = WKNOB_SIZE,
-                                       .frame_h = WKNOB_SIZE,
-                                       .frames = WKNOB_FRAMES};
-    surf_knob *k = surf_knob_new(surf_screen(), 0, 0, &st);
+    static const surf_knob_style big = {.strip = &knob_img, .frame_w = WKNOB_SIZE,
+                                        .frame_h = WKNOB_SIZE,
+                                        .frames = WKNOB_FRAMES};
+    static const surf_knob_style small = {.strip = &knobsm_img,
+                                          .frame_w = WKNOBSM_SIZE,
+                                          .frame_h = WKNOBSM_SIZE,
+                                          .frames = WKNOB_FRAMES};
+    /* third arg: pixel size — anything < 52 gets the small style */
+    const surf_knob_style *st =
+        (n_args > 2 && mp_obj_get_int(args[2]) < 52) ? &small : &big;
+    surf_knob *k = surf_knob_new(surf_screen(), 0, 0, st);
     if (!k)
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("knob create failed"));
     surf_node *node = surf_knob_node(k);
     surf_node_detach(node);
-    surf_node_set_pos(node, (int16_t)mp_obj_get_int(x), (int16_t)mp_obj_get_int(y));
+    surf_node_set_pos(node, (int16_t)mp_obj_get_int(args[0]),
+                      (int16_t)mp_obj_get_int(args[1]));
     surfer_widget_obj_t *o = new_widget_obj(W_KNOB, k, node);
     surf_knob_on_change(k, widget_cb, o);
     return MP_OBJ_FROM_PTR(o);
 }
-static MP_DEFINE_CONST_FUN_OBJ_2(mod_knob_obj, mod_knob);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_knob_obj, 2, 3, mod_knob);
+
+static mp_obj_t mod_button(size_t n_args, const mp_obj_t *args)
+{
+    static surf_button_style st = {
+        .normal = &btn_img, .pressed = &btnpr_img, .inset = WBTN_INSET,
+        .text_color = SURF_RGB(240, 242, 248),
+    };
+    st.font = &fonts_rt[0];
+    const char *label = n_args > 4 ? mp_obj_str_get_str(args[4]) : "";
+    surf_button *b = surf_button_new(surf_screen(), 0, 0,
+                                     (int16_t)mp_obj_get_int(args[2]),
+                                     (int16_t)mp_obj_get_int(args[3]), &st, label);
+    if (!b)
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("button create failed"));
+    surf_node *node = surf_button_node(b);
+    surf_node_detach(node);
+    surf_node_set_pos(node, (int16_t)mp_obj_get_int(args[0]),
+                      (int16_t)mp_obj_get_int(args[1]));
+    surfer_widget_obj_t *o = new_widget_obj(W_BUTTON, b, node);
+    surf_button_on_press(b, widget_cb, o);
+    return MP_OBJ_FROM_PTR(o);
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_button_obj, 4, 5, mod_button);
 
 static mp_obj_t mod_checkbox(mp_obj_t x, mp_obj_t y)
 {
@@ -612,12 +705,14 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_knob), MP_ROM_PTR(&mod_knob_obj)},
     {MP_ROM_QSTR(MP_QSTR_checkbox), MP_ROM_PTR(&mod_checkbox_obj)},
     {MP_ROM_QSTR(MP_QSTR_dropdown), MP_ROM_PTR(&mod_dropdown_obj)},
+    {MP_ROM_QSTR(MP_QSTR_button), MP_ROM_PTR(&mod_button_obj)},
     /* capitalized aliases, DESIGN.md §3 taste */
     {MP_ROM_QSTR(MP_QSTR_Group), MP_ROM_PTR(&mod_group_obj)},
     {MP_ROM_QSTR(MP_QSTR_Slider), MP_ROM_PTR(&mod_slider_obj)},
     {MP_ROM_QSTR(MP_QSTR_Knob), MP_ROM_PTR(&mod_knob_obj)},
     {MP_ROM_QSTR(MP_QSTR_Checkbox), MP_ROM_PTR(&mod_checkbox_obj)},
     {MP_ROM_QSTR(MP_QSTR_Dropdown), MP_ROM_PTR(&mod_dropdown_obj)},
+    {MP_ROM_QSTR(MP_QSTR_Button), MP_ROM_PTR(&mod_button_obj)},
     {MP_ROM_QSTR(MP_QSTR__touch), MP_ROM_PTR(&mod_touch_obj)},
     {MP_ROM_QSTR(MP_QSTR_screenshot), MP_ROM_PTR(&mod_screenshot_obj)},
     /* key kinds (match surf_sdl_key_kind) */

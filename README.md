@@ -39,6 +39,15 @@ with widgets created live from typed Python — `s = surfer.slider(x, y)`,
 `screen.add(s)`, `s.callback = fn`. Hand-written binding, unix port.
 The Python API is documented in [docs/python-api.md](docs/python-api.md).*
 
+![Gamma 9001 drum machine UI built in Python on surfer](docs/gamma9001-pattern.png)
+
+*The real-world test: the [Gamma 9001](https://shorepine.github.io/amy/gamma9001/)
+drum machine's UI rebuilt as a ~350-line MicroPython program
+([examples/gamma9001.py](bindings/surfer/examples/gamma9001.py)) — 8
+scrollable channel rows, 96 small knobs, step pads as custom Python
+widgets on `node.on_touch`, a running playhead, and a second page of
+control panels behind a button (detach/reattach). No audio yet.*
+
 ## The idea
 
 At 1080p RGB565, one frame is ~4 MB. On an ESP32-P4 the framebuffer lives in
