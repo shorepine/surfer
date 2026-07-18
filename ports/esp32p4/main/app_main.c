@@ -26,6 +26,11 @@
 #include "widget_assets.h"
 #include "font_ui16.h"
 #include "font_ui28.h"
+#include "font_mono16.h"
+
+/* 1 = full-screen textgrid editor scroll test (validates the CPU fast
+ * text path + fb_ptr cache handling on hardware); 0 = the M2 mixer. */
+#define DEMO_EDITOR 1
 
 static const char *knob_names[6] = {"cutoff", "res", "env", "lfo", "mix", "vol"};
 
@@ -216,6 +221,146 @@ static void bar_show(int32_t v, void *user)
     surf_rect_set_size(user, (int16_t)(1 + (((int64_t)v * 99) >> 16)), 8);
 }
 
+#if DEMO_EDITOR
+/* ---- editor scroll test: the textgrid worst case, one line per frame,
+ * every cell rewritten — the on-device answer to DESIGN.md §5.6's
+ * predicted 15-20 ms/page. Finger-drag scrolls; idle resumes auto. */
+
+static const char *code_lines[] = {
+    "static bool collect(surf_node *n, int16_t px, int16_t py,",
+    "                    surf_rect clip, surf_rect dr)",
+    "{",
+    "    if (n->flags & SURF_NF_HIDDEN)",
+    "        return false;",
+    "    int16_t ax = (int16_t)(px + n->x), ay = (int16_t)(py + n->y);",
+    "",
+    "    if (n->type == SURF_NODE_GROUP) {",
+    "        if (n->flags & SURF_NF_CLIP) {",
+    "            clip = surf_rect_intersect(clip, box);",
+    "            if (surf_rect_empty(clip))",
+    "                return false;",
+    "        }",
+    "        for (surf_node *c = n->last; c; c = c->prev)",
+    "            if (collect(c, ax, ay, clip, dr))",
+    "                return true;",
+    "        return false;",
+    "    }",
+    "",
+    "    surf_rect bounds = {ax, ay, n->w, n->h};",
+    "    surf_rect vis = surf_rect_intersect(bounds, clip);",
+    "    if (surf_rect_empty(vis))",
+    "        return false;",
+    "",
+    "    surf_g.plist[paint_n++] = (surf_paint_ent){n, ax, ay, vis};",
+    "    return node_opaque(n) && surf_rect_covers(bounds, dr);",
+    "}",
+};
+#define NCODE (int)(sizeof code_lines / sizeof code_lines[0])
+
+static surf_node *ed_grid;
+static int16_t ed_rows, ed_cols;
+static int ed_top;
+static int64_t ed_last_touch;
+static int ed_drag_acc, ed_last_y;
+static int16_t ed_cell_h;
+
+static void ed_fill_row(int16_t row, int lineno)
+{
+    char buf[160];
+    snprintf(buf, sizeof buf, "%5d  %s", lineno + 1,
+             code_lines[lineno % NCODE]);
+    surf_textgrid_set_row(ed_grid, row, buf);
+}
+
+static void ed_fill_all(void)
+{
+    for (int16_t r = 0; r < ed_rows; r++)
+        ed_fill_row(r, ed_top + r);
+}
+
+static void ed_touch(surf_node *n, const surf_touch *t, void *user)
+{
+    (void)n; (void)user;
+    ed_last_touch = esp_timer_get_time();
+    if (t->phase == SURF_TOUCH_DOWN) {
+        ed_last_y = t->y;
+        ed_drag_acc = 0;
+        return;
+    }
+    if (t->phase != SURF_TOUCH_MOVE)
+        return;
+    ed_drag_acc += ed_last_y - t->y;
+    ed_last_y = t->y;
+    while (ed_drag_acc >= ed_cell_h) {
+        ed_drag_acc -= ed_cell_h;
+        ed_top++;
+        surf_textgrid_scroll(ed_grid, 1);
+        ed_fill_row((int16_t)(ed_rows - 1), ed_top + ed_rows - 1);
+    }
+    while (ed_drag_acc <= -ed_cell_h && ed_top > 0) {
+        ed_drag_acc += ed_cell_h;
+        ed_top--;
+        surf_textgrid_scroll(ed_grid, -1);
+        ed_fill_row(0, ed_top);
+    }
+}
+
+static void editor_scene(const surf_hal *hal, const surf_font *mono)
+{
+    surf_point cs;
+    ed_cell_h = surf_font_line_h(mono);
+    {
+        surf_node *probe = surf_textgrid_new(mono, 1, 1, 0, 0);
+        cs = surf_textgrid_cell_size(probe);
+        surf_node_destroy(probe);
+    }
+    ed_cols = (int16_t)(LCD_W / cs.x);
+    ed_rows = (int16_t)(LCD_H / cs.y);
+    ed_grid = surf_textgrid_new(mono, ed_cols, ed_rows,
+                                SURF_RGB(200, 205, 215), SURF_RGB(18, 20, 25));
+    surf_node_add(surf_screen(), ed_grid);
+    surf_node_set_on_touch(ed_grid, ed_touch, NULL);
+    surf_node_set_gesture_grab(ed_grid, true);
+    ed_fill_all();
+
+    printf("editor up: %dx%d cells (%dx%d px each) — drag to scroll, "
+           "idle 2s resumes autoscroll\n", ed_cols, ed_rows, cs.x, cs.y);
+
+    int64_t acc = 0, worst = 0, win_start = esp_timer_get_time();
+    int win_frames = 0;
+
+    for (;;) {
+        bool autoscroll =
+            (esp_timer_get_time() - ed_last_touch) > 2000000;
+        if (autoscroll) {
+            ed_top++;
+            surf_textgrid_scroll(ed_grid, 1);
+            ed_fill_row((int16_t)(ed_rows - 1), ed_top + ed_rows - 1);
+        }
+
+        int64_t t0 = esp_timer_get_time();
+        surf_tick();
+        int64_t dt = esp_timer_get_time() - t0;
+        acc += dt;
+        if (dt > worst)
+            worst = dt;
+        win_frames++;
+
+        int64_t now = esp_timer_get_time();
+        if (now - win_start >= 1000000) {
+            printf("tick avg %.2f ms  max %.2f ms  %.1f fps  [%s]\n",
+                   acc / 1000.0 / win_frames, worst / 1000.0,
+                   win_frames * 1e6 / (double)(now - win_start),
+                   autoscroll ? "autoscroll" : "touch");
+            acc = worst = 0;
+            win_frames = 0;
+            win_start = now;
+        }
+        vTaskDelay(1);
+    }
+}
+#endif /* DEMO_EDITOR */
+
 void app_main(void)
 {
     printf("surfer M2 — ESP32-P4, %" PRIu32 " KB PSRAM free\n",
@@ -277,6 +422,14 @@ void app_main(void)
                                   SURF_FMT_ARGB8888, hal);
     surf_font ui16 = mk_font(&surf_font_ui16, hal);
     surf_font ui28 = mk_font(&surf_font_ui28, hal);
+
+#if DEMO_EDITOR
+    static surf_font mono16;
+    mono16 = mk_font(&surf_font_mono16, hal);
+    (void)ui16; (void)ui28;
+    (void)knob_img; (void)track_img; (void)cap_img;
+    editor_scene(hal, &mono16);  /* never returns */
+#endif
     surf_knob_style kstyle = {.strip = &knob_img, .frame_w = WKNOB_SIZE,
                               .frame_h = WKNOB_SIZE, .frames = WKNOB_FRAMES};
     surf_slider_style sstyle = {.track = &track_img, .inset = WTRACK_INSET, .cap = &cap_img};

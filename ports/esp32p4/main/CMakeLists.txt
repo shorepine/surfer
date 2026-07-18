@@ -63,8 +63,18 @@ add_custom_command(
     DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/gen/fontbake ${ROBOTO}
     VERBATIM
 )
+set(JBMONO ${SURFER_ROOT}/assets/fonts/JetBrainsMono-Regular.ttf)
+add_custom_command(
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/gen/font_mono16.h
+    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/gen/fontbake mono16 16 ${JBMONO}
+            ${CMAKE_CURRENT_BINARY_DIR}/gen/font_mono16.h
+            "32-126,167,181,8211,8212,8230"
+    DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/gen/fontbake ${JBMONO}
+    VERBATIM
+)
 add_custom_target(surfer_gen_assets DEPENDS
     ${CMAKE_CURRENT_BINARY_DIR}/gen/widget_assets.h
     ${CMAKE_CURRENT_BINARY_DIR}/gen/font_ui16.h
-    ${CMAKE_CURRENT_BINARY_DIR}/gen/font_ui28.h)
+    ${CMAKE_CURRENT_BINARY_DIR}/gen/font_ui28.h
+    ${CMAKE_CURRENT_BINARY_DIR}/gen/font_mono16.h)
 add_dependencies(${COMPONENT_LIB} surfer_gen_assets)

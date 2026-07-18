@@ -260,7 +260,21 @@ its own task, only `present`/PPA waits move, not callbacks.)
    composes directly into the framebuffer through the optional `fb_ptr`
    hal op. Opaque cells are pure writes (no fb reads), so a full page is
    ~1.2 MB ≈ 15–20 ms predicted on the P4 (~50–60 fps page scroll),
-   sub-ms for single-line edits; desktop measures 0.35 ms. This is the
+   sub-ms for single-line edits; desktop measures 0.35 ms.
+
+   **Measured on hardware: 45.7 ms/full page (21 fps) — the prediction
+   missed two costs.** CPU stores to PSRAM go through a write-allocate
+   cache (every 128 B line is read before it's written, halving
+   effective write bandwidth), and the present path must msync the
+   whole CPU-written band back (another ~1.2 MB of writeback). Render
+   ≈ 24 ms + msync ≈ 14 ms + DMA2D damage-forward ≈ 6 ms ≈ the
+   measured 46 ms. Single-cell edits remain sub-ms. Two known paths to
+   ~60 fps scrolling if a device code editor matters: (a) scroll-blit —
+   shift the framebuffer region with DMA2D and render only the exposed
+   row (~7 ms/line-scroll); (b) render rows into an internal-SRAM
+   scratch and DMA2D them into the fb, which sidesteps both the
+   write-allocate reads and the msync (the same scratch-tile pattern
+   the S3 notes propose). Neither is built yet. This is the
    sanctioned exception to "no per-pixel code outside the hal": the
    textgrid composer in `src/text/textgrid.c` is per-pixel core code,
    justified the same way the M2 asset rules were — by measurement. The
