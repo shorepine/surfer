@@ -101,7 +101,7 @@ from the built-in benchmark and the 6-knobs + 6-sliders demo:
 
 | platform | status | notes |
 |---|---|---|
-| **ESP32-P4** (MIPI DSI + PPA) | working | the primary target — 60 fps under finger on the Function-EV-Board; MicroPython "tulip mode" builds |
+| **ESP32-P4** (MIPI DSI + PPA) | working | the primary target — 60 fps widgets under finger, 91 fps text scroll; MicroPython "tulip mode" verified on hardware (on-screen REPL + USB keyboard) |
 | **Desktop** (SDL2, macOS/Linux) | working | the iteration loop; also hosts the MicroPython unix build |
 | **Web** (emscripten canvas) | coming soon | the SDL hal compiled with emscripten — M6 |
 | **RP2350** (HSTX DVI, e.g. Fruit Jam) | researched | no blitter but a good CPU-compositing fit at 320×240/400×240 RGB565 — [notes here](docs/rp2350-notes.md) |

@@ -130,8 +130,9 @@ UIScreen — `s = surfer.slider(x,y)`, `screen.add(s)`, `s.y_pos`,
 `s.callback = fn` all live. `bindings/surfer/test_surfer.py` is the
 headless binding test (uses `surfer._touch` injection).
 
-Tulip mode for the P4 builds (flash + on-device verify pending
-hardware): `make mpy-p4` — micropython v1.28.0 (`~/micropython-1.28`,
+Tulip mode for the P4 is VERIFIED ON HARDWARE — REPL on the panel,
+USB keyboard typing, touch live (MICROPY_HW_ENABLE_USBDEV=0 in the
+board config is what frees the OTG PHY for host mode). Build: `make mpy-p4` — micropython v1.28.0 (`~/micropython-1.28`,
 first P4-capable release) + IDF v5.5.1 (`~/esp/esp-idf-v5.5.1`, MP's P4
 code needs 5.5 APIs; the native firmware in `ports/esp32p4/` stays on
 5.4.1). The binding is split over a tiny port layer

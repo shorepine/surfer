@@ -6,6 +6,10 @@
 #define MICROPY_PY_NETWORK_WLAN  (0)
 #define MICROPY_PY_BLUETOOTH     (0)
 
+// the OTG port is surfer's USB *host* (keyboard); MP must not claim the
+// PHY for a CDC device — the REPL uses USB-Serial-JTAG / UART instead
+#define MICROPY_HW_ENABLE_USBDEV (0)
+
 #define MICROPY_HW_ENABLE_SDCARD (1)
 #define MICROPY_HW_ENABLE_UART_REPL (1)
 
