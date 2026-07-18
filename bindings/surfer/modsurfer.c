@@ -11,47 +11,66 @@
  *   widget.value, widget.callback, plus the node properties
  * Capitalized aliases (surfer.Slider is surfer.slider) exist for taste.
  * Callbacks fire from surfer.tick() on the same thread — no marshaling. */
+#include <string.h>
+
 #include "py/obj.h"
 #include "py/objstr.h"
 #include "py/runtime.h"
 
 #include "surfer.h"
-#include "hal_sdl.h"
+#include "surfer_port.h"
 #include "widget_assets.h"
 #include "font_ui16.h"
 #include "font_ui28.h"
 #include "font_mono16.h"
 
-/* ---- baked default style ---- */
+/* ---- baked default style; pixels re-homed by surfer_port_prepare_image
+ * at init (flash .rodata → PSRAM on device, no-op on desktop) ---- */
 
-static const surf_image knob_img = {
+static surf_image knob_img = {
     .pixels = (void *)widget_knob_px, .w = WKNOB_STRIP_W, .h = WKNOB_SIZE,
     .stride = WKNOB_STRIP_W * 4, .format = SURF_FMT_ARGB8888,
 };
-static const surf_image track_img = {
+static surf_image track_img = {
     .pixels = (void *)widget_trackfull_px, .w = WTRACKFULL_W, .h = WTRACKFULL_H,
     .stride = WTRACKFULL_W * 4, .format = SURF_FMT_ARGB8888,
 };
-static const surf_image cap_img = {
+static surf_image cap_img = {
     .pixels = (void *)widget_cap_px, .w = WCAP_W, .h = WCAP_H,
     .stride = WCAP_W * 4, .format = SURF_FMT_ARGB8888,
 };
-static const surf_image check_img = {
+static surf_image check_img = {
     .pixels = (void *)widget_check_px, .w = WCHECK_SIZE * 2, .h = WCHECK_SIZE,
     .stride = WCHECK_SIZE * 2 * 4, .format = SURF_FMT_ARGB8888,
 };
-static const surf_image panel_img = {
+static surf_image panel_img = {
     .pixels = (void *)widget_panel_px, .w = WPANEL_SIZE, .h = WPANEL_SIZE,
     .stride = WPANEL_SIZE * 4, .format = SURF_FMT_ARGB8888,
 };
-static const surf_image arrow_img = {
+static surf_image arrow_img = {
     .pixels = (void *)widget_arrow_px, .w = WARROW_W * 2, .h = WARROW_H,
     .stride = WARROW_W * 2 * 4, .format = SURF_FMT_ARGB8888,
 };
 
-static const surf_font *const fonts[] = {&surf_font_ui16, &surf_font_ui28,
-                                         &surf_font_mono16};
+/* runtime font copies so the atlases can be re-homed too */
+static surf_font fonts_rt[3];
+static const surf_font *const fonts_baked[] = {&surf_font_ui16, &surf_font_ui28,
+                                               &surf_font_mono16};
 #define NFONTS 3
+
+static void prepare_assets(void)
+{
+    surfer_port_prepare_image(&knob_img);
+    surfer_port_prepare_image(&track_img);
+    surfer_port_prepare_image(&cap_img);
+    surfer_port_prepare_image(&check_img);
+    surfer_port_prepare_image(&panel_img);
+    surfer_port_prepare_image(&arrow_img);
+    for (int i = 0; i < NFONTS; i++) {
+        fonts_rt[i] = *fonts_baked[i];
+        surfer_port_prepare_image(&fonts_rt[i].atlas);
+    }
+}
 
 /* ---- object types ---- */
 
@@ -108,7 +127,7 @@ static const surf_font *font_of(mp_int_t i)
 {
     if (i < 0 || i >= NFONTS)
         mp_raise_ValueError(MP_ERROR_TEXT("bad font"));
-    return fonts[i];
+    return &fonts_rt[i];
 }
 
 /* ---- Node ---- */
@@ -362,17 +381,27 @@ static surfer_widget_obj_t *new_widget_obj(uint8_t kind, void *w, surf_node *nod
 
 static bool inited;
 
+static const surf_hal *g_hal;
+
 static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
 {
-    if (inited)
-        return mp_const_none;
     int16_t w = n_args > 0 ? (int16_t)mp_obj_get_int(args[0]) : 1024;
     int16_t h = n_args > 1 ? (int16_t)mp_obj_get_int(args[1]) : 600;
-    const surf_hal *hal = surf_hal_sdl_init(w, h, "surfer");
-    if (!hal)
-        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("sdl init failed"));
     surf_config cfg = {.max_nodes = 512, .bg = SURF_RGB(18, 20, 25)};
-    if (!surf_init(hal, w, h, &cfg))
+    if (inited) {
+        /* soft reset (or repeat init): the VM dropped every Python object,
+         * so rebuild the C scene from scratch on the surviving hal —
+         * stale nodes with dangling callbacks must not outlive the VM */
+        surf_deinit();
+        if (!surf_init(g_hal, w, h, &cfg))
+            mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("surf re-init failed"));
+        return mp_const_none;
+    }
+    g_hal = surfer_port_init(w, h);
+    if (!g_hal)
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("display init failed"));
+    prepare_assets();
+    if (!surf_init(g_hal, w, h, &cfg))
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("surf init failed"));
     inited = true;
     return mp_const_none;
@@ -381,7 +410,7 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_init_obj, 0, 2, mod_init);
 
 static mp_obj_t mod_tick(void)
 {
-    if (!surf_hal_sdl_pump())
+    if (!surfer_port_pump())
         return mp_const_false;
     surf_tick();
     return mp_const_true;
@@ -391,8 +420,8 @@ static MP_DEFINE_CONST_FUN_OBJ_0(mod_tick_obj, mod_tick);
 static mp_obj_t mod_keys(void)
 {
     mp_obj_t list = mp_obj_new_list(0, NULL);
-    surf_sdl_key k;
-    while (surf_hal_sdl_poll_key(&k)) {
+    surfer_key k;
+    while (surfer_port_poll_key(&k)) {
         mp_obj_t t[3] = {
             MP_OBJ_NEW_SMALL_INT(k.kind),
             mp_obj_new_str(k.utf8, strlen(k.utf8)),
@@ -521,11 +550,12 @@ static MP_DEFINE_CONST_FUN_OBJ_2(mod_checkbox_obj, mod_checkbox);
 
 static mp_obj_t mod_dropdown(size_t n_args, const mp_obj_t *args)
 {
-    static const surf_dropdown_style st = {
-        .panel = &panel_img, .inset = WPANEL_INSET, .font = &surf_font_ui16,
+    static surf_dropdown_style st = {
+        .panel = &panel_img, .inset = WPANEL_INSET,
         .text_color = SURF_RGB(240, 242, 248), .hi_color = SURF_RGB(60, 90, 140),
         .arrow = &arrow_img, .arrow_w = WARROW_W, .arrow_h = WARROW_H,
     };
+    st.font = &fonts_rt[0];  /* runtime copy with a device-readable atlas */
     size_t len;
     mp_obj_t *items;
     mp_obj_get_array(args[3], &len, &items);
@@ -562,7 +592,7 @@ static MP_DEFINE_CONST_FUN_OBJ_3(mod_touch_obj, mod_touch);
 
 static mp_obj_t mod_screenshot(mp_obj_t path)
 {
-    return mp_obj_new_bool(surf_hal_sdl_dump_ppm(mp_obj_str_get_str(path)));
+    return mp_obj_new_bool(surfer_port_screenshot(mp_obj_str_get_str(path)));
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mod_screenshot_obj, mod_screenshot);
 

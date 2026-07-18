@@ -128,5 +128,20 @@ same thread; a GC-root registry keeps C-referenced objects alive).
 tulip mode: an on-screen REPL on a mono16 textgrid + tulipcc-style
 UIScreen — `s = surfer.slider(x,y)`, `screen.add(s)`, `s.y_pos`,
 `s.callback = fn` all live. `bindings/surfer/test_surfer.py` is the
-headless binding test (uses `surfer._touch` injection). Remaining:
-esp32p4 MicroPython port, M6 web build + real art.
+headless binding test (uses `surfer._touch` injection).
+
+Tulip mode for the P4 builds (flash + on-device verify pending
+hardware): `make mpy-p4` — micropython v1.28.0 (`~/micropython-1.28`,
+first P4-capable release) + IDF v5.5.1 (`~/esp/esp-idf-v5.5.1`, MP's P4
+code needs 5.5 APIs; the native firmware in `ports/esp32p4/` stays on
+5.4.1). The binding is split over a tiny port layer
+(`bindings/surfer/surfer_port.h`): `port_sdl.c` for desktop,
+`port_p4.c` for device — EK79007 DSI panel + GT911 touch brought up on
+core-IDF APIs only (no BSP/managed components; wiring constants
+documented in-file), assets copied flash→PSRAM at init, and
+`usb_kbd.c`, a raw-usb_host HID boot-protocol keyboard for the USB-A
+port. Board def `bindings/surfer/boards/SURFER_P4/` freezes tulip.py
+(6MiB app partition — the binary carries the baked assets). Flash with
+`make mpy-p4-flash PORT=...`, then `import tulip` at the serial REPL.
+Soft-reset re-inits the C scene (mod_init tears down on re-entry).
+Remaining: on-device tulip verify, M6 web build + real art.

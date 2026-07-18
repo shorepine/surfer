@@ -107,7 +107,32 @@ mpy: build/libsurfer.a gen
 		CFLAGS_EXTRA="-Wno-gnu-folding-constant"  # newer clang vs MP v1.26
 	@echo "→ $(MPY_DIR)/ports/unix/build-standard/micropython"
 
-.PHONY: gen mpy
+# MicroPython esp32 port for the P4 (tulip mode on device).
+# Needs micropython v1.28.x (has ESP32-P4 support) + IDF v5.5.1 (MP's
+# recommended version; its P4 code expects 5.5 APIs). The surfer-native
+# firmware in ports/esp32p4/ stays on 5.4.1 independently.
+MPY_P4_DIR ?= $(HOME)/micropython-1.28
+IDF_EXPORT ?= $(HOME)/esp/esp-idf-v5.5.1/export.sh
+
+mpy-p4: gen
+	cp bindings/surfer/boards/SURFER_P4/partitions-surfer-16MiB.csv \
+		$(MPY_P4_DIR)/ports/esp32/
+	bash -c "source $(IDF_EXPORT) >/dev/null 2>&1 && \
+		$(MAKE) -C $(MPY_P4_DIR)/ports/esp32 \
+		BOARD=SURFER_P4 \
+		BOARD_DIR=$(abspath bindings/surfer/boards/SURFER_P4) \
+		USER_C_MODULES=$(abspath bindings/surfer/micropython.cmake)"
+	@echo "→ $(MPY_P4_DIR)/ports/esp32/build-SURFER_P4/  (make mpy-p4-flash PORT=...)"
+
+mpy-p4-flash:
+	bash -c "source $(IDF_EXPORT) >/dev/null 2>&1 && \
+		$(MAKE) -C $(MPY_P4_DIR)/ports/esp32 \
+		BOARD=SURFER_P4 \
+		BOARD_DIR=$(abspath bindings/surfer/boards/SURFER_P4) \
+		USER_C_MODULES=$(abspath bindings/surfer/micropython.cmake) \
+		PORT=$(PORT) deploy"
+
+.PHONY: gen mpy mpy-p4 mpy-p4-flash
 
 clean:
 	rm -rf build

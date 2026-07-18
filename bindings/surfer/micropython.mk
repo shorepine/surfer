@@ -7,6 +7,7 @@ SURFER_MOD_DIR := $(USERMOD_DIR)
 SURFER_DIR ?= $(abspath $(SURFER_MOD_DIR)/../..)
 
 SRC_USERMOD_C += $(SURFER_MOD_DIR)/modsurfer.c
+SRC_USERMOD_C += $(SURFER_MOD_DIR)/port_sdl.c
 
 CFLAGS_USERMOD += -I$(SURFER_DIR)/include \
                   -I$(SURFER_DIR)/src/hal/sdl \
