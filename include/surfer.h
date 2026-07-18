@@ -108,6 +108,11 @@ surf_node *surf_scrollview_new(int16_t x, int16_t y, int16_t w, int16_t h);
 void       surf_scrollview_set_offset(surf_node *sv, int16_t x, int16_t y);
 surf_point surf_scrollview_offset(const surf_node *sv);
 surf_point surf_scrollview_content_size(surf_node *sv);
+/* Fast scroll (opt-in, same contract as the textgrid's): vertical scroll
+ * shifts the viewport pixels via the hal and repaints only the exposed
+ * strip instead of every visible child. The caller promises the viewport
+ * is fully on-screen and unoccluded. Ignored without hal scroll_rect. */
+void surf_scrollview_set_fast_scroll(surf_node *sv, bool on);
 
 /* tree — detach keeps the subtree fully alive (DESIGN.md §2.2) */
 void surf_node_add(surf_node *parent, surf_node *child);

@@ -231,7 +231,9 @@ static MP_DEFINE_CONST_FUN_OBJ_2(node_set_color_obj, node_set_color);
 
 static mp_obj_t node_fast_scroll(mp_obj_t self_in, mp_obj_t on)
 {
+    /* each setter no-ops on the wrong node type */
     surf_textgrid_set_fast_scroll(node_of(self_in), mp_obj_is_true(on));
+    surf_scrollview_set_fast_scroll(node_of(self_in), mp_obj_is_true(on));
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(node_fast_scroll_obj, node_fast_scroll);

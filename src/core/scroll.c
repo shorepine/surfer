@@ -50,6 +50,46 @@ void surf_scroll_forget(surf_node *sv)
             surf_g.scrollers[i] = surf_g.scrollers[--surf_g.nscrollers];
 }
 
+/* Damage after an offset change. Fast mode (opt-in): if only y moved,
+ * shift the viewport pixels via the hal and repaint just the exposed
+ * strip — the difference between re-blitting ~700 widgets per scrolled
+ * frame and one DMA pass (19 fps vs 60 on the P4, DESIGN.md §5.6). */
+static void scroll_damage(surf_node *sv, int32_t old_x_q16, int32_t old_y_q16)
+{
+    int16_t dx = (int16_t)((sv->u.scroll.off_x >> 16) - (old_x_q16 >> 16));
+    int16_t dy = (int16_t)((sv->u.scroll.off_y >> 16) - (old_y_q16 >> 16));
+
+    if (sv->u.scroll.fast && surf_g.hal->scroll_rect && dx == 0 &&
+        surf_node_attached(sv) && !(sv->flags & SURF_NF_HIDDEN)) {
+        if (dy == 0)
+            return;  /* sub-pixel: nothing moved on screen */
+        for (const surf_node *p = sv->parent; p; p = p->parent)
+            if (p->type == SURF_NODE_SCROLLVIEW || (p->flags & SURF_NF_CLIP))
+                goto slow;
+        int16_t ax, ay;
+        surf_node_abs_pos(sv, &ax, &ay);
+        surf_rect v = {ax, ay, sv->w, sv->h};
+        surf_rect on = surf_rect_intersect(v, (surf_rect){0, 0, surf_g.w, surf_g.h});
+        int16_t ady = dy < 0 ? (int16_t)-dy : dy;
+        if (on.w != v.w || on.h != v.h || ady >= v.h)
+            goto slow;
+        surf_g.hal->scroll_rect(v, dy);
+        surf_rect strip = dy > 0
+            ? (surf_rect){v.x, (int16_t)(v.y + v.h - ady), v.w, ady}
+            : (surf_rect){v.x, v.y, v.w, ady};
+        surf_dirty_add(&surf_g.dirty, strip);
+        return;
+    }
+slow:
+    surf_damage_subtree(sv);
+}
+
+void surf_scrollview_set_fast_scroll(surf_node *sv, bool on)
+{
+    if (is_sv(sv))
+        sv->u.scroll.fast = on;
+}
+
 /* raw drag offset with resistance past the edges: half-speed overscroll.
  * An axis with no scrollable range doesn't move at all — no rubber-band
  * wiggle on the axis that fits (vertical lists stay vertical). */
@@ -97,7 +137,7 @@ void surf_scroll_touch(surf_node *sv, const surf_touch *t)
         sv->u.scroll.last_x = t->x;
         sv->u.scroll.last_y = t->y;
         if (old_x != sv->u.scroll.off_x || old_y != sv->u.scroll.off_y)
-            surf_damage_subtree(sv);
+            scroll_damage(sv, old_x, old_y);
         return;
     }
 
@@ -156,11 +196,12 @@ void surf_scroll_tick(void)
 {
     for (int i = 0; i < surf_g.nscrollers;) {
         surf_node *sv = surf_g.scrollers[i];
+        int32_t old_x = sv->u.scroll.off_x, old_y = sv->u.scroll.off_y;
         bool ax = axis_tick(&sv->u.scroll.off_x, &sv->u.scroll.vel_x,
                             max_off_q16(sv, false));
         bool ay = axis_tick(&sv->u.scroll.off_y, &sv->u.scroll.vel_y,
                             max_off_q16(sv, true));
-        surf_damage_subtree(sv);
+        scroll_damage(sv, old_x, old_y);
         if (!ax && !ay)
             surf_scroll_forget(sv);  /* swaps the tail into slot i */
         else
@@ -191,9 +232,10 @@ void surf_scrollview_set_offset(surf_node *sv, int16_t x, int16_t y)
     if (ny > my) ny = my;
     if (nx == sv->u.scroll.off_x && ny == sv->u.scroll.off_y)
         return;
+    int32_t old_x = sv->u.scroll.off_x, old_y = sv->u.scroll.off_y;
     sv->u.scroll.off_x = nx;
     sv->u.scroll.off_y = ny;
-    surf_damage_subtree(sv);
+    scroll_damage(sv, old_x, old_y);
 }
 
 surf_point surf_scrollview_offset(const surf_node *sv)

@@ -244,8 +244,9 @@ const surf_hal *surfer_port_init(int16_t w, int16_t h)
 bool surfer_port_pump(void)
 {
     /* Present never blocks (triple buffering), so pace the Python loop
-     * here — ~200Hz tick ceiling, and FreeRTOS gets air to breathe. */
-    vTaskDelay(pdMS_TO_TICKS(5));
+     * here — a short sleep keeps FreeRTOS breathing without eating a
+     * third of a 60fps frame budget. */
+    vTaskDelay(pdMS_TO_TICKS(2));
     return true;
 }
 

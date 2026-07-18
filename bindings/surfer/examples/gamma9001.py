@@ -194,6 +194,7 @@ def main():
     # ---------------- page 1: channel rows in a scrollview
     sv = surfer.scrollview(0, 52, W, H - 52)
     root.add(sv)
+    sv.fast_scroll(True)  # fullscreen-width viewport, unoccluded
 
     pads = []
     ch_knobs = []  # [ch][i] -> GKnob, for programmatic gang demo
@@ -385,11 +386,39 @@ def main():
         shot = None
     frames = 0
 
+    # v-scroll fps meter (serial only): first ~8s auto-scrolls the channel
+    # list as a bench, then reports whenever the list is actively scrolling
+    bench = [0, 4]
+    last_off = 0
+    t_prev = time.ticks_ms()
+    ms_sum = n_frames = n_scrolled = 0
+
     while surfer.tick():
+        now = time.ticks_ms()
+        ms_sum += time.ticks_diff(now, t_prev)
+        t_prev = now
+        n_frames += 1
+        off_y = sv.scroll_offset()[1]
+        if off_y != last_off:
+            n_scrolled += 1
+        last_off = off_y
+        if ms_sum >= 1000:
+            if n_scrolled > n_frames // 4:
+                print("vscroll: %.1f fps (%.1f ms/frame)" %
+                      (n_frames * 1000.0 / ms_sum, ms_sum / n_frames))
+            ms_sum = n_frames = n_scrolled = 0
+
+        if not shot and frames < 400 and current[0] == "pattern":
+            frames += 1
+            y = bench[0] + bench[1]
+            if y >= 188 or y <= 0:
+                bench[1] = -bench[1]
+            bench[0] = max(0, min(188, y))
+            sv.scroll_to(0, bench[0])
+
         for k in surfer.keys():
             pass
         if state["playing"]:
-            now = time.ticks_ms()
             if time.ticks_diff(now, state["_next"]) >= 0:
                 step = state["step"]
                 set_playhead(step)

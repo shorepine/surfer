@@ -78,6 +78,7 @@ struct surf_node {
             int32_t drag_off_x, drag_off_y;  /* offset when the drag began */
             int16_t down_x, down_y, last_x, last_y;
             bool    dragging;
+            bool    fast;                    /* hal-assisted pixel scroll */
         } scroll;
         struct {
             const surf_font *font;

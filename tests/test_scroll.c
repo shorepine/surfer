@@ -158,6 +158,48 @@ static void test_axis_lock(void)
     OK(surf_scrollview_offset(sv).x == 0);
 }
 
+static void test_fast_scrollview(void)
+{
+    fresh(200, 200, 64);
+    surf_node *sv = surf_scrollview_new(10, 20, 100, 100);
+    surf_node_add(surf_screen(), sv);
+    surf_node_add(sv, surf_rect_new(0, 0, 80, 300, 1));
+    surf_tick();
+
+    surf_scrollview_set_fast_scroll(sv, true);
+    nops = 0;
+    surf_scrollview_set_offset(sv, 0, 30);
+    OK(nops == 1 && ops[0].op == 'S');
+    OK(rect_eq(ops[0].r, (surf_rect){10, 20, 100, 100}));
+    OK((int16_t)ops[0].c == 30);
+    /* only the exposed bottom strip is dirty */
+    OK(surf_g.dirty.n == 1 &&
+       rect_eq(surf_g.dirty.r[0], (surf_rect){10, 90, 100, 30}));
+    surf_tick();
+
+    /* scrolling back up exposes a top strip */
+    surf_scrollview_set_offset(sv, 0, 10);
+    OK(surf_g.dirty.n == 1 &&
+       rect_eq(surf_g.dirty.r[0], (surf_rect){10, 20, 100, 20}));
+    surf_tick();
+
+    /* a drag through real dispatch also rides the shift path */
+    nops = 0;
+    drag(50, 100, 50, 60, 4);
+    bool shifted = false, full = false;
+    for (int i = 0; i < nops; i++) {
+        if (ops[i].op == 'S')
+            shifted = true;
+        if (ops[i].op == 'F' && ops[i].r.h >= 100)
+            full = true;
+    }
+    OK(shifted);
+    OK(!full);  /* never repainted the whole viewport */
+    while (surf_g.nscrollers > 0)
+        surf_tick();
+    surf_node_destroy(sv);
+}
+
 static void test_overscroll_spring(void)
 {
     fresh(200, 200, 64);
@@ -268,6 +310,7 @@ void run_scroll_tests(void)
     test_scroll_compose_hit();
     test_scroll_drag_steal();
     test_axis_lock();
+    test_fast_scrollview();
     test_overscroll_spring();
     test_checkbox();
     test_dropdown();
