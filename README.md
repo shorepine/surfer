@@ -104,6 +104,7 @@ from the built-in benchmark and the 6-knobs + 6-sliders demo:
 | **Desktop** (SDL2, macOS/Linux) | working | the iteration loop; also hosts the MicroPython unix build |
 | **Web** (emscripten canvas) | coming soon | the SDL hal compiled with emscripten — M6 |
 | **RP2350** (HSTX DVI, e.g. Fruit Jam) | researched | no blitter but a good CPU-compositing fit at 320×240/400×240 RGB565 — [notes here](docs/rp2350-notes.md) |
+| **ESP32-S3** (parallel RGB, tulipcc today) | researched | standalone port not worth it at 1024×600; the good path is surfer-as-widget-layer inside tulipcc's engine — [notes here](docs/esp32s3-notes.md) |
 
 ## Layout & building
 
