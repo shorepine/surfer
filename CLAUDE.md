@@ -36,6 +36,8 @@ milestones.
 ```
 make sdl        # builds desktop demo → build/surfer_demo
 make test       # unit tests (dirty-rect coalescing, wrap, hit test)
+make test-sdl   # present-coherence regression (opens an SDL window):
+                # fb vs presented texture must match after fast scroll
 make web        # emscripten build (later milestone)
 idf.py build    # from ports/esp32p4/ (later milestone)
 ```

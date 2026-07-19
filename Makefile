@@ -14,7 +14,7 @@ SDL_LIBS   := $(shell sdl2-config --libs)
 
 GEN_DIR := build/gen
 
-.PHONY: sdl test clean
+.PHONY: sdl test test-sdl clean
 
 sdl: build/surfer_demo build/surfer_settings build/surfer_type build/surfer_editor \
 	build/surfer_bounce
@@ -78,12 +78,24 @@ build/surfer_bounce: $(CORE_SRCS) $(SDL_SRCS) demos/bounce.c \
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -I$(GEN_DIR) \
 		-o $@ $(CORE_SRCS) $(SDL_SRCS) demos/bounce.c $(SDL_LIBS)
 
-TEST_SRCS := $(wildcard tests/*.c)
+TEST_SRCS := $(filter-out tests/sdl_present_test.c,$(wildcard tests/*.c))
 
 build/surfer_test: $(CORE_SRCS) $(WIDGET_SRCS) $(TEST_SRCS) tests/mock_hal.h $(HDRS)
 	@mkdir -p build
 	$(CC) $(CFLAGS) -Isrc/core -Itests \
 		-o $@ $(CORE_SRCS) $(WIDGET_SRCS) $(TEST_SRCS) -lm
+
+# present-coherence regression (fb vs presented texture after fast
+# scroll). Opens a real SDL window, so it's not part of plain `make test`.
+test-sdl: build/surfer_present_test
+	./build/surfer_present_test
+
+build/surfer_present_test: $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) \
+		tests/sdl_present_test.c $(GEN_DIR)/font_mono16.h $(HDRS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -I$(GEN_DIR) \
+		-o $@ $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) tests/sdl_present_test.c \
+		$(SDL_LIBS) -lm
 
 # static lib + generated headers for the MicroPython binding
 LIB_SRCS := $(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS)

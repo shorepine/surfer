@@ -38,4 +38,9 @@ bool surf_hal_sdl_poll_key(surf_sdl_key *out);
 /* debug: write the current framebuffer as a binary PPM (P6) */
 bool surf_hal_sdl_dump_ppm(const char *path);
 
+/* debug: write what is actually presented (the streaming texture, read
+ * back through the renderer) as a binary PPM. Differs from dump_ppm
+ * exactly when present failed to keep the texture coherent with fb. */
+bool surf_hal_sdl_dump_screen_ppm(const char *path);
+
 #endif /* SURF_HAL_SDL_H */

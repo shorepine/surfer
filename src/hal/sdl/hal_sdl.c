@@ -20,6 +20,8 @@ static struct {
     surf_sdl_key  keys[TOUCH_RING];
     int           key_r, key_w;
     bool          mouse_down;
+    surf_rect     scrolled;     /* union of scroll_rect regions this frame */
+    bool          has_scrolled;
 } S;
 
 static void push_key(uint8_t kind, bool shift, const char *utf8)
@@ -150,6 +152,15 @@ static void h_scale_blit(const surf_image *src, surf_rect src_r, surf_rect dst_r
 
 static void h_present(const surf_rect *dirty, int n)
 {
+    if (S.has_scrolled) {
+        /* scroll_rect moved fb pixels outside the damage system's view;
+         * the dirty list only covers the exposed strip. The texture must
+         * catch up over the whole shifted region — same rule as the p4
+         * hal's full damage-forward on scrolled frames (DESIGN.md §5.6). */
+        SDL_Rect r = {S.scrolled.x, S.scrolled.y, S.scrolled.w, S.scrolled.h};
+        SDL_UpdateTexture(S.tex, &r, S.fb + r.y * S.w + r.x, S.w * 2);
+        S.has_scrolled = false;
+    }
     for (int i = 0; i < n; i++) {
         SDL_Rect r = {dirty[i].x, dirty[i].y, dirty[i].w, dirty[i].h};
         SDL_UpdateTexture(S.tex, &r, S.fb + r.y * S.w + r.x, S.w * 2);
@@ -192,6 +203,20 @@ static void h_scroll_rect(surf_rect r, int16_t dy)
     int16_t ady = dy < 0 ? (int16_t)-dy : dy;
     if (ady >= r.h)
         return;
+    if (S.has_scrolled) {
+        int16_t x1 = S.scrolled.x < r.x ? S.scrolled.x : r.x;
+        int16_t y1 = S.scrolled.y < r.y ? S.scrolled.y : r.y;
+        int16_t x2 = S.scrolled.x + S.scrolled.w > r.x + r.w
+                         ? (int16_t)(S.scrolled.x + S.scrolled.w)
+                         : (int16_t)(r.x + r.w);
+        int16_t y2 = S.scrolled.y + S.scrolled.h > r.y + r.h
+                         ? (int16_t)(S.scrolled.y + S.scrolled.h)
+                         : (int16_t)(r.y + r.h);
+        S.scrolled = (surf_rect){x1, y1, (int16_t)(x2 - x1), (int16_t)(y2 - y1)};
+    } else {
+        S.scrolled = r;
+        S.has_scrolled = true;
+    }
     size_t row_bytes = (size_t)r.w * 2;
     if (dy > 0) {  /* content up: walk top-down */
         for (int y = r.y; y < r.y + r.h - ady; y++)
@@ -278,6 +303,49 @@ void surf_hal_sdl_quit(void)
     if (S.win) SDL_DestroyWindow(S.win);
     memset(&S, 0, sizeof S);
     SDL_Quit();
+}
+
+bool surf_hal_sdl_dump_screen_ppm(const char *path)
+{
+    /* What the user actually sees: the streaming texture, not S.fb.
+     * The two only match if present kept the texture coherent — this
+     * exists to catch paths (like scroll_rect) that move fb pixels
+     * outside the damage system's view. */
+    if (!S.ren || !S.tex)
+        return false;
+    int ow, oh;
+    if (SDL_GetRendererOutputSize(S.ren, &ow, &oh) != 0 || ow < S.w || oh < S.h)
+        return false;
+    uint16_t *px = malloc((size_t)ow * oh * 2);
+    if (!px)
+        return false;
+    SDL_RenderCopy(S.ren, S.tex, NULL, NULL);
+    if (SDL_RenderReadPixels(S.ren, NULL, SDL_PIXELFORMAT_RGB565, px,
+                             ow * 2) != 0) {
+        free(px);
+        return false;
+    }
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        free(px);
+        return false;
+    }
+    fprintf(f, "P6\n%d %d\n255\n", S.w, S.h);
+    for (int y = 0; y < S.h; y++) {
+        for (int x = 0; x < S.w; x++) {
+            /* nearest sample handles the hidpi output scale */
+            uint16_t p = px[(int64_t)(y * oh / S.h) * ow + x * ow / S.w];
+            uint8_t rgb[3] = {
+                (uint8_t)(((p >> 8) & 0xf8) | (p >> 13)),
+                (uint8_t)(((p >> 3) & 0xfc) | ((p >> 9) & 0x03)),
+                (uint8_t)(((p << 3) & 0xf8) | ((p >> 2) & 0x07)),
+            };
+            fwrite(rgb, 1, 3, f);
+        }
+    }
+    fclose(f);
+    free(px);
+    return true;
 }
 
 bool surf_hal_sdl_dump_ppm(const char *path)
