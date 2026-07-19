@@ -187,10 +187,13 @@ def main():
     cell = surfer.textgrid(1, 1)  # probe cell metrics
     cols, rows = W // max(1, cell.w), H // max(1, cell.h)
     cell.destroy()
+
+    # module globals: app/hosts (and the web shell) reach these as
+    # tulip.console / tulip.screen / tulip.repl
+    global console, screen, repl
     console = Console(cols, rows)
 
     # UI layer sits in front of the console text, tulip-style
-    global screen
     screen = UIScreen()
 
     ns = {"surfer": surfer, "screen": screen, "console": console}
@@ -200,18 +203,36 @@ def main():
     import os
     feed = os.getenv("SURF_REPL_FEED") if hasattr(os, "getenv") else None
     shot = os.getenv("SURF_SHOT") if hasattr(os, "getenv") else None
-    frames = 0
+    state = {"frames": 0}
 
-    while surfer.tick():
+    def _frame():
+        """One tick of tulip mode; False when the host wants to quit."""
+        if not surfer.tick():
+            return False
         for kind, text, shift in surfer.keys():
             repl.key(kind, text, shift)
-        frames += 1
-        if feed and frames == 5:
+        state["frames"] += 1
+        if feed and state["frames"] == 5:
             repl.feed(feed)
-        if shot and frames == 10:
+        if shot and state["frames"] == 10:
             surfer.screenshot(shot)
             if feed:
-                return
+                return False
+        return True
+
+    global frame
+    frame = _frame
+
+    import sys
+    if sys.platform == "webassembly":
+        # the browser owns the loop: index.html calls tulip.frame() per
+        # requestAnimationFrame. Looping here would suspend the VM inside
+        # this module's import, which wedges ASYNCIFY (see surfer's
+        # bindings/surfer/web/hal_sdl_web.c).
+        return
+
+    while frame():
+        pass
 
 
 main()

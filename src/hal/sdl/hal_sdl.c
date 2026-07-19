@@ -4,6 +4,12 @@
 #include <SDL.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(__EMSCRIPTEN__) && !defined(SURF_HAL_SDL_NO_YIELD)
+#include <emscripten.h>
+EM_ASYNC_JS(void, surf_web_raf_yield, (void), {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+});
+#endif
 
 #include "hal_sdl.h"
 
@@ -268,6 +274,12 @@ static void push_touch(int16_t x, int16_t y, uint8_t phase)
 
 const surf_hal *surf_hal_sdl_init(int16_t w, int16_t h, const char *title)
 {
+#ifdef SURF_HAL_SDL_NO_YIELD
+    /* JS drives frames (MP web build): SDL must never emscripten_sleep
+     * internally — by default it sleeps in every GL SwapWindow under
+     * ASYNCIFY, which aborts the synchronous VM calls. */
+    SDL_SetHint(SDL_HINT_EMSCRIPTEN_ASYNCIFY, "0");
+#endif
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
         return NULL;
     S.w = w;
@@ -276,8 +288,15 @@ const surf_hal *surf_hal_sdl_init(int16_t w, int16_t h, const char *title)
                              w, h, SDL_WINDOW_ALLOW_HIGHDPI);
     if (!S.win)
         goto fail;
+#ifdef SURF_HAL_SDL_NO_YIELD
+    /* JS-driven frames (MP web build): rAF paces us, and emscripten's
+     * PRESENTVSYNC path sleeps internally — an ASYNCIFY suspend the
+     * synchronous VM calls can't survive. */
+    S.ren = SDL_CreateRenderer(S.win, -1, SDL_RENDERER_ACCELERATED);
+#else
     S.ren = SDL_CreateRenderer(S.win, -1,
                                SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+#endif
     if (!S.ren)
         S.ren = SDL_CreateRenderer(S.win, -1, 0);
     if (!S.ren)
@@ -369,6 +388,19 @@ bool surf_hal_sdl_dump_ppm(const char *path)
 
 bool surf_hal_sdl_pump(void)
 {
+#if defined(__EMSCRIPTEN__) && !defined(SURF_HAL_SDL_NO_YIELD)
+    /* ASYNCIFY yield: suspend until the next animation frame — this is
+     * how the desktop `while (pump()) tick;` shape runs unchanged in a
+     * canvas, and it must be requestAnimationFrame, not a timer: frames
+     * drawn from timer-resumed contexts are not reliably composited
+     * (observed in Chrome), and rAF paces to vsync for free. Yield
+     * lives here, not in present: present is skipped entirely on
+     * damage-free frames. The MicroPython web build defines
+     * SURF_HAL_SDL_NO_YIELD instead: an ASYNCIFY suspend inside MP's
+     * import machinery wedges the VM, so there the browser drives
+     * frames from JS and every call into the VM stays synchronous. */
+    surf_web_raf_yield();
+#endif
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         switch (e.type) {

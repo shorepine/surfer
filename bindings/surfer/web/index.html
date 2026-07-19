@@ -1,0 +1,67 @@
+<!doctype html>
+<!-- tulip mode in a canvas. Serve the build directory and open this file;
+     it expects micropython.mjs + micropython.wasm next to it.
+     Everything is synchronous: `import tulip` sets up and returns
+     (tulip.py skips its loop on webassembly), then the rAF loop below
+     drives one tulip.frame() per animation frame. -->
+<html>
+<head>
+<meta charset="utf-8">
+<title>surfer — tulip mode</title>
+<style>
+  html, body { margin: 0; background: #12141a; height: 100%; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { outline: none; width: 1024px; height: 600px; }
+  #status { position: fixed; top: 8px; left: 12px; color: #78808f;
+            font: 13px system-ui; }
+</style>
+</head>
+<body>
+<div id="status">loading…</div>
+<canvas id="canvas" width="1024" height="600" tabindex="0"
+        oncontextmenu="event.preventDefault()"></canvas>
+<script type="module">
+  import createMicroPythonModule from "./micropython.mjs";
+
+  const status = document.getElementById("status");
+  const canvas = document.getElementById("canvas");
+  const Module = await createMicroPythonModule({
+    canvas,
+    // surfer presents on damage, not every frame — the drawing buffer
+    // must survive compositing or idle frames show black
+    webglContextAttributes: { preserveDrawingBuffer: true },
+    print: (t) => console.log(t),
+    printErr: (t) => console.warn(t),
+  });
+  // minimal runtime init, matching what api.js's loadMicroPython does
+  // (we skip the JS-proxy layer: tulip mode lives on the canvas).
+  Module.ccall("mp_js_init", "null", ["number", "number"],
+               [2 * 1024, 64 * 1024 * 1024]);
+  window.Module = Module;  // debug access from the console
+  const run = (src) =>
+    Module.ccall("surfer_web_run", "null", ["string"], [src]);
+  if (!new URLSearchParams(location.search).has("probe")) {
+    // boot: tulip.py sets up and returns without looping on webassembly
+    run("import tulip");
+    status.textContent = "";
+    canvas.focus();
+    // rAF when visible (vsync pacing), setTimeout when the tab is
+    // hidden or embedded (rAF never fires there)
+    const step = () => {
+      run("tulip.frame()");
+      schedule();
+    };
+    const schedule = () => {
+      if (document.visibilityState === "visible") {
+        requestAnimationFrame(step);
+      } else {
+        setTimeout(step, 33);
+      }
+    };
+    schedule();
+  } else {
+    status.textContent = "probe mode";
+  }
+</script>
+</body>
+</html>

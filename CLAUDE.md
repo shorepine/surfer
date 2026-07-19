@@ -38,8 +38,9 @@ make sdl        # builds desktop demo → build/surfer_demo
 make test       # unit tests (dirty-rect coalescing, wrap, hit test)
 make test-sdl   # present-coherence regression (opens an SDL window):
                 # fb vs presented texture must match after fast scroll
-make web        # emscripten build (later milestone)
-idf.py build    # from ports/esp32p4/ (later milestone)
+make web        # emscripten C demos → build/web/{mixer,settings}.html
+make mpy-web    # tulip mode in the browser → build/web/index.html
+idf.py build    # from ports/esp32p4/
 ```
 
 Every core change must keep `make sdl && make test` green. Performance
@@ -131,6 +132,26 @@ tulip mode: an on-screen REPL on a mono16 textgrid + tulipcc-style
 UIScreen — `s = surfer.slider(x,y)`, `screen.add(s)`, `s.y_pos`,
 `s.callback = fn` all live. `bindings/surfer/test_surfer.py` is the
 headless binding test (uses `surfer._touch` injection).
+
+M6 web: both flavors build and run in a canvas. (1) C demos —
+`make web`: the sdl hal compiled with emscripten (`-sUSE_SDL=2
+-sASYNCIFY`); the desktop `while (pump()) tick` shape survives via an
+EM_ASYNC_JS rAF yield in `surf_hal_sdl_pump` (rAF, not a timer: frames
+drawn from timer-resumed contexts are not reliably composited).
+(2) Tulip mode — `make mpy-web`: micropython's webassembly port +
+the binding via the `bindings/surfer/web/` VARIANT_DIR (freezes
+tulip.py + gamma9001; `index.html` is the host page). Key rules
+learned, all load-bearing: the MP VM must NEVER suspend (an ASYNCIFY
+suspend inside import machinery wedges the VM; inside a sync ccall it
+aborts), so the browser drives frames — tulip.py skips its loop on
+sys.platform == "webassembly" and JS calls `tulip.frame()` per rAF
+(setTimeout fallback when hidden). That requires: pyscript-style
+deferred GC (standard variant's gc_collect suspends via
+emscripten_scan_registers), `SDL_HINT_EMSCRIPTEN_ASYNCIFY=0` +
+no-PRESENTVSYNC (SDL sleeps in SwapWindow/Delay by default under
+ASYNCIFY), and hal_sdl compiled as a direct usermod TU with
+SURF_HAL_SDL_NO_YIELD (emscripten drops EM_JS bodies that come from
+static archives — links fine, JS function silently missing).
 
 Tulip mode for the P4 is VERIFIED ON HARDWARE — REPL on the panel,
 USB keyboard typing, touch live (MICROPY_HW_ENABLE_USBDEV=0 in the

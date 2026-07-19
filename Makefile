@@ -111,6 +111,54 @@ build/libsurfer.a: $(LIB_OBJS)
 gen: $(GEN_DIR)/widget_assets.h $(GEN_DIR)/font_ui16.h $(GEN_DIR)/font_ui28.h \
 	$(GEN_DIR)/font_mono16.h
 
+# ---- web (M6): the sdl backend compiled with emscripten ----
+# DESIGN.md's "zero new code" bet: demos compile unchanged; ASYNCIFY +
+# the pacing yield in surf_hal_sdl_pump turn the desktop main loop into
+# a browser-friendly one.
+
+EMCC ?= emcc
+WEB_DIR := build/web
+WEB_CFLAGS := -O2 -std=gnu11 -Wall -Wextra -Iinclude -Isrc/core -Isrc/hal/sdl \
+	-I$(GEN_DIR) -sUSE_SDL=2
+WEB_LDFLAGS := -sASYNCIFY -sALLOW_MEMORY_GROWTH
+
+web: gen
+	@mkdir -p $(WEB_DIR)
+	$(EMCC) $(WEB_CFLAGS) $(WEB_LDFLAGS) -o $(WEB_DIR)/mixer.html \
+		$(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) demos/mixer.c
+	$(EMCC) $(WEB_CFLAGS) $(WEB_LDFLAGS) -o $(WEB_DIR)/settings.html \
+		$(CORE_SRCS) $(WIDGET_SRCS) $(SDL_SRCS) demos/settings.c
+	@echo "→ $(WEB_DIR)/  (serve the directory; .html loads the .wasm)"
+
+# tulip mode in the browser: micropython webassembly port + the surfer
+# binding, via the "web" variant in bindings/surfer/web/. `import tulip`
+# and gamma9001 are frozen in; index.html kicks it off.
+EMAR ?= emar
+# no SDL_SRCS here: hal_sdl.c holds an EM_ASYNC_JS whose JS body emcc
+# drops when linked out of an archive — the binding compiles it directly
+# (bindings/surfer/web/hal_sdl_web.c)
+WEB_OBJS := $(patsubst %.c,build/webobj/%.o,$(CORE_SRCS) $(WIDGET_SRCS))
+
+build/webobj/%.o: %.c $(HDRS)
+	@mkdir -p $(dir $@)
+	$(EMCC) $(WEB_CFLAGS) -c $< -o $@
+
+build/libsurfer-web.a: gen $(WEB_OBJS)
+	$(EMAR) rcs $@ $(WEB_OBJS)
+
+mpy-web: build/libsurfer-web.a
+	$(MAKE) -C $(MPY_DIR)/ports/webassembly \
+		VARIANT_DIR=$(abspath bindings/surfer/web) \
+		USER_C_MODULES=$(abspath bindings) \
+		SURFER_DIR=$(abspath .)
+	@mkdir -p $(WEB_DIR)
+	cp $(MPY_DIR)/ports/webassembly/build-web/micropython.mjs \
+	   $(MPY_DIR)/ports/webassembly/build-web/micropython.wasm \
+	   bindings/surfer/web/index.html $(WEB_DIR)/
+	@echo "→ $(WEB_DIR)/index.html  (serve $(WEB_DIR) and open it)"
+
+.PHONY: web mpy-web
+
 MPY_DIR ?= $(HOME)/micropython
 
 mpy: build/libsurfer.a gen
