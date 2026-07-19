@@ -393,7 +393,10 @@ def main():
     t_prev = time.ticks_ms()
     ms_sum = n_frames = n_scrolled = 0
 
-    while surfer.tick():
+    def _step():
+        """One frame of app logic; the host has already ticked the
+        compositor. False = the app is done (shot mode)."""
+        nonlocal frames, last_off, t_prev, ms_sum, n_frames, n_scrolled
         now = time.ticks_ms()
         ms_sum += time.ticks_diff(now, t_prev)
         t_prev = now
@@ -452,7 +455,23 @@ def main():
                 show_page("controls")
             elif frames == 60:
                 surfer.screenshot(shot + "_p2.ppm")
-                return
+                return False
+        return True
+
+    import sys
+    if sys.platform == "webassembly":
+        # never loop here: on web this import runs inside the browser's
+        # frame callback and a blocking loop freezes the tab. tulip's
+        # frame driver calls the hook once per frame instead. (tulip's
+        # REPL keeps draining the keyboard first — the on-glass REPL
+        # stays live over the app, unlike the desktop takeover.)
+        import tulip
+        tulip.app_frame = _step
+        return
+
+    while surfer.tick():
+        if _step() is False:
+            return
 
 
 main()

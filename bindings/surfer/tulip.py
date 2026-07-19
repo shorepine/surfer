@@ -14,6 +14,12 @@ import surfer
 
 W, H = 1024, 600
 
+# Apps that need per-frame work (playback, animation) set this to a
+# callable instead of running their own loop — on web a blocking loop
+# inside an exec freezes the tab. Called once per frame after the REPL;
+# return False to unhook.
+app_frame = None
+
 
 class UIScreen:
     """Holds the live UI objects, tulipcc-style. add() parents anything
@@ -207,10 +213,13 @@ def main():
 
     def _frame():
         """One tick of tulip mode; False when the host wants to quit."""
+        global app_frame
         if not surfer.tick():
             return False
         for kind, text, shift in surfer.keys():
             repl.key(kind, text, shift)
+        if app_frame is not None and app_frame() is False:
+            app_frame = None
         state["frames"] += 1
         if feed and state["frames"] == 5:
             repl.feed(feed)

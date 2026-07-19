@@ -5,10 +5,13 @@
 # it can't test $(CC): the port sets CC=emcc after including py.mk
 SURFER_WEB := 1
 
-JSFLAGS += -s ASYNCIFY -s USE_SDL=2 -s ALLOW_MEMORY_GROWTH
-# The VM suspends (emscripten_sleep in surf_hal_sdl_pump) with the whole
-# interpreter on the C stack; the default 4KB asyncify stack overflows.
-JSFLAGS += -s ASYNCIFY_STACK_SIZE=65536
+# NO ASYNCIFY, deliberately: everything in this build is synchronous
+# (browser-driven frames, deferred GC, SDL sleeps disabled — see
+# mpconfigvariant.h and hal_sdl_web.c). Without it, ASYNCIFY's failure
+# modes (suspend inside import wedges the VM; inside a sync call it
+# aborts) are structurally impossible instead of merely avoided, and
+# the VM skips the unwind-bookkeeping overhead ASYNCIFY instruments
+# into every function.
+JSFLAGS += -s USE_SDL=2 -s ALLOW_MEMORY_GROWTH
 
 FROZEN_MANIFEST = $(VARIANT_DIR)/manifest.py
-JSFLAGS += -s ASSERTIONS=2

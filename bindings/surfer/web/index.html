@@ -45,18 +45,20 @@
     run("import tulip");
     status.textContent = "";
     canvas.focus();
-    // rAF when visible (vsync pacing), setTimeout when the tab is
-    // hidden or embedded (rAF never fires there)
+    // arm BOTH rAF and a fallback timeout, first to fire wins: rAF for
+    // vsync pacing in a visible tab, the timeout because rAF can be
+    // starved indefinitely (hidden/embedded pages — checking
+    // visibilityState is not reliable enough to pick just one)
+    let rafId = 0, toId = 0;
     const step = () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(toId);
       run("tulip.frame()");
       schedule();
     };
     const schedule = () => {
-      if (document.visibilityState === "visible") {
-        requestAnimationFrame(step);
-      } else {
-        setTimeout(step, 33);
-      }
+      rafId = requestAnimationFrame(step);
+      toId = setTimeout(step, 50);
     };
     schedule();
   } else {
