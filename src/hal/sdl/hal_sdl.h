@@ -34,6 +34,8 @@ typedef struct {
 } surf_sdl_key;
 
 bool surf_hal_sdl_poll_key(surf_sdl_key *out);
+/* keys currently down (state, not events) — up to max entries */
+int  surf_hal_sdl_keys_held(surf_sdl_key *out, int max);
 
 /* debug: write the current framebuffer as a binary PPM (P6) */
 bool surf_hal_sdl_dump_ppm(const char *path);

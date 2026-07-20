@@ -24,6 +24,7 @@ static struct {
     usb_transfer_t          *xfer;
     QueueHandle_t            q;      /* surfer_key */
     uint8_t                  prev[6];
+    uint8_t                  mods;
     uint8_t                  addr_pending;
     /* software key repeat (HID boot reports carry state, not repeats) */
     uint8_t                  held_usage;
@@ -53,38 +54,45 @@ static const char shift_map[0x39] = {
     [0x33] = ':', '"', '~', '<', '>', '?',
 };
 
-static void emit(uint8_t kind, bool shift, char ch)
+/* usage id + modifiers → key; false when the usage maps to nothing */
+static bool usage_to_key(uint8_t u, uint8_t mods, surfer_key *out)
 {
-    surfer_key k = {.kind = kind, .shift = shift};
-    if (ch) {
-        k.utf8[0] = ch;
-        k.utf8[1] = 0;
+    bool shift = (mods & 0x22) != 0;
+    memset(out, 0, sizeof *out);
+    out->shift = shift;
+    switch (u) {
+    case 0x28: out->kind = SURFER_KEY_ENTER; return true;
+    case 0x2a: out->kind = SURFER_KEY_BACKSPACE; return true;
+    case 0x2b: out->kind = SURFER_KEY_TEXT;  /* tab → space-ish */
+               out->shift = false;
+               out->utf8[0] = ' ';
+               return true;
+    case 0x4a: out->kind = SURFER_KEY_HOME; return true;
+    case 0x4b: out->kind = SURFER_KEY_PGUP; return true;
+    case 0x4c: out->kind = SURFER_KEY_DELETE; return true;
+    case 0x4d: out->kind = SURFER_KEY_END; return true;
+    case 0x4e: out->kind = SURFER_KEY_PGDN; return true;
+    case 0x4f: out->kind = SURFER_KEY_RIGHT; return true;
+    case 0x50: out->kind = SURFER_KEY_LEFT; return true;
+    case 0x51: out->kind = SURFER_KEY_DOWN; return true;
+    case 0x52: out->kind = SURFER_KEY_UP; return true;
     }
-    xQueueSend(K.q, &k, 0);
+    if (u < sizeof base_map) {
+        char ch = shift ? shift_map[u] : base_map[u];
+        if (ch) {
+            out->kind = SURFER_KEY_TEXT;
+            out->utf8[0] = ch;
+            return true;
+        }
+    }
+    return false;
 }
 
 static void handle_usage(uint8_t u, uint8_t mods)
 {
-    bool shift = (mods & 0x22) != 0;
-    switch (u) {
-    case 0x28: emit(SURFER_KEY_ENTER, shift, 0); return;
-    case 0x2a: emit(SURFER_KEY_BACKSPACE, shift, 0); return;
-    case 0x2b: emit(SURFER_KEY_TEXT, false, ' '); return;  /* tab → space-ish */
-    case 0x4a: emit(SURFER_KEY_HOME, shift, 0); return;
-    case 0x4b: emit(SURFER_KEY_PGUP, shift, 0); return;
-    case 0x4c: emit(SURFER_KEY_DELETE, shift, 0); return;
-    case 0x4d: emit(SURFER_KEY_END, shift, 0); return;
-    case 0x4e: emit(SURFER_KEY_PGDN, shift, 0); return;
-    case 0x4f: emit(SURFER_KEY_RIGHT, shift, 0); return;
-    case 0x50: emit(SURFER_KEY_LEFT, shift, 0); return;
-    case 0x51: emit(SURFER_KEY_DOWN, shift, 0); return;
-    case 0x52: emit(SURFER_KEY_UP, shift, 0); return;
-    }
-    if (u < sizeof base_map) {
-        char ch = shift ? shift_map[u] : base_map[u];
-        if (ch)
-            emit(SURFER_KEY_TEXT, shift, ch);
-    }
+    surfer_key k;
+    if (usage_to_key(u, mods, &k))
+        xQueueSend(K.q, &k, 0);
 }
 
 static void report_cb(usb_transfer_t *t)
@@ -115,6 +123,7 @@ static void report_cb(usb_transfer_t *t)
                 K.held_usage = 0;
         }
         memcpy(K.prev, r + 2, 6);
+        K.mods = r[0];
     }
     if (K.dev)
         usb_host_transfer_submit(t);  /* keep listening */
@@ -262,6 +271,19 @@ void surfer_usb_kbd_init(void)
         return;
     K.q = xQueueCreate(64, sizeof(surfer_key));
     xTaskCreate(kbd_task, "surfer_kbd", 4096, NULL, 5, NULL);
+}
+
+/* currently-down keys from the last boot report (state, not events —
+ * up to 6 at once; this is what lets a game move AND fire) */
+int surfer_usb_kbd_held(surfer_key *out, int max)
+{
+    if (!K.dev)
+        return 0;
+    int n = 0;
+    for (int i = 0; i < 6 && n < max; i++)
+        if (K.prev[i] >= 4 && usage_to_key(K.prev[i], K.mods, &out[n]))
+            n++;
+    return n;
 }
 
 bool surfer_usb_kbd_poll(surfer_key *out)

@@ -34,6 +34,10 @@ typedef struct {
 const surf_hal *surfer_port_init(int16_t w, int16_t h, bool single_buffer);
 bool surfer_port_pump(void);   /* false = the host wants to quit */
 bool surfer_port_poll_key(surfer_key *out);
+/* keys currently held DOWN (state, not events): up to max entries.
+ * Events (poll_key) are for typing; this is for games — held state is
+ * per-frame and unlimited-rollover-agnostic (move + fire together). */
+int  surfer_port_keys_held(surfer_key *out, int max);
 bool surfer_port_screenshot(const char *path);
 /* Make the framebuffer coherent for CPU reads (fb_read); no-op on hosts
  * whose fb is always CPU-visible. */

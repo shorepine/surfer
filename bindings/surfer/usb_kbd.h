@@ -6,6 +6,7 @@
 
 void surfer_usb_kbd_init(void);
 bool surfer_usb_kbd_poll(surfer_key *out);
+int  surfer_usb_kbd_held(surfer_key *out, int max);
 
 /* short aliases used by port_p4.c */
 #define usb_kbd_init surfer_usb_kbd_init

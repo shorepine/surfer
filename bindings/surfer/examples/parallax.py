@@ -167,8 +167,10 @@ def main():
     scene.add(ship)
     XMIN, XMAX = 8, W * 2 // 3 - ship.w   # nose stays left of the 2/3 line
     YMIN, YMAX = 16, SKY_H + MT_H - ship.h + 24
-    pos = [180, SKY_H + MT_H - ship.h - 40]
-    ship.y_pos = pos[1]
+    pos = [180.0, float(SKY_H + MT_H - ship.h - 40)]
+    vel = [0.0, 0.0]
+    ACC, VMAX, DRAG = 1.1, 11.0, 0.86     # px/f^2, px/f, per-frame decay
+    ship.y_pos = int(pos[1])
 
     # laser pool: 6 circle shots, each an A8 mask with its own cycling
     # phase (purple -> pink -> green). Tiny masks: shots ride the fast
@@ -195,40 +197,55 @@ def main():
                           int(a[2] + (b[2] - a[2]) * u))
 
     try:
-        import parallax_auto        # optional test autopilot: keys(frame)
-        auto_keys = parallax_auto.keys
+        import parallax_auto        # optional test autopilot: held(frame)
+        auto_held = parallax_auto.held
     except ImportError:
-        auto_keys = None
+        auto_held = None
 
     state = {"frames": 0, "t0": time.ticks_ms(), "n": 0}
 
     def _step():
         f = state["frames"] = state["frames"] + 1
 
-        # arrows fly the ship, space shoots (max 6 live, cooldown-spaced)
+        # held-state flight model (keys_held, not key events): thrust
+        # while held, drag when released — momentum, not a grid. keys()
+        # still drains the event queue so nothing leaks to the REPL.
+        surfer.keys()
         if cool[0] > 0:
             cool[0] -= 1
-        events = auto_keys(f) if auto_keys else surfer.keys()
-        for kind, text, shift in events:
+        ax = ay = 0
+        firing = False
+        for kind, text in (auto_held(f) if auto_held else surfer.keys_held()):
             if kind == surfer.KEY_LEFT:
-                pos[0] -= 14
+                ax -= 1
             elif kind == surfer.KEY_RIGHT:
-                pos[0] += 14
+                ax += 1
             elif kind == surfer.KEY_UP:
-                pos[1] -= 12
+                ay -= 1
             elif kind == surfer.KEY_DOWN:
-                pos[1] += 12
-            elif kind == surfer.KEY_TEXT and text == " " and cool[0] == 0:
-                for sh in shots:
-                    if not sh["live"]:
-                        sh["live"] = True
-                        sh["x"] = pos[0] + ship.w
-                        sh["y"] = pos[1] + ship.h // 2 - 8
-                        sh["s"].hidden = False
-                        cool[0] = 8
-                        break
-        pos[0] = min(max(pos[0], XMIN), XMAX)
-        pos[1] = min(max(pos[1], YMIN), YMAX)
+                ay += 1
+            elif kind == surfer.KEY_TEXT and text == " ":
+                firing = True
+        vel[0] = (vel[0] + ax * ACC) if ax else vel[0] * DRAG
+        vel[1] = (vel[1] + ay * ACC) if ay else vel[1] * DRAG
+        vel[0] = min(max(vel[0], -VMAX), VMAX)
+        vel[1] = min(max(vel[1], -VMAX), VMAX)
+        pos[0] += vel[0]
+        pos[1] += vel[1]
+        for i, lo, hi in ((0, XMIN, XMAX), (1, YMIN, YMAX)):
+            if pos[i] < lo:
+                pos[i], vel[i] = lo, 0.0
+            elif pos[i] > hi:
+                pos[i], vel[i] = hi, 0.0
+        if firing and cool[0] == 0:
+            for sh in shots:
+                if not sh["live"]:
+                    sh["live"] = True
+                    sh["x"] = int(pos[0]) + ship.w
+                    sh["y"] = int(pos[1]) + ship.h // 2 - 8
+                    sh["s"].hidden = False
+                    cool[0] = 8
+                    break
 
         # forward position sets the pace: 0.5x at the left edge up to
         # 2x at the 2/3 line — pushing ahead feels like accelerating
@@ -240,8 +257,8 @@ def main():
         # overlays move only AFTER the layers shift: a fast layer heals
         # the smear at each overlay's position as of set_offset time, so
         # shift-then-move keeps old ghosts inside the healed region
-        ship.x_pos = pos[0]
-        ship.y_pos = pos[1]
+        ship.x_pos = int(pos[0])
+        ship.y_pos = int(pos[1])
 
         for k, sh in enumerate(shots):
             if not sh["live"]:

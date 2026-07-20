@@ -934,6 +934,25 @@ static mp_obj_t mod_keys(void)
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mod_keys_obj, mod_keys);
 
+/* surfer.keys_held() -> ((kind, text), ...): keys DOWN right now.
+ * Events (keys()) are for typing; this is for games — poll it per
+ * frame and move + fire at once. */
+static mp_obj_t mod_keys_held(void)
+{
+    surfer_key k[8];
+    int n = surfer_port_keys_held(k, 8);
+    mp_obj_t items[8];
+    for (int i = 0; i < n; i++) {
+        mp_obj_t pair[2] = {
+            MP_OBJ_NEW_SMALL_INT(k[i].kind),
+            mp_obj_new_str(k[i].utf8, strlen(k[i].utf8)),
+        };
+        items[i] = mp_obj_new_tuple(2, pair);
+    }
+    return mp_obj_new_tuple((size_t)n, items);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mod_keys_held_obj, mod_keys_held);
+
 static mp_obj_t mod_screen(void)
 {
     return MP_OBJ_FROM_PTR(new_node_obj(surf_screen()));
@@ -1201,6 +1220,7 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_init), MP_ROM_PTR(&mod_init_obj)},
     {MP_ROM_QSTR(MP_QSTR_tick), MP_ROM_PTR(&mod_tick_obj)},
     {MP_ROM_QSTR(MP_QSTR_keys), MP_ROM_PTR(&mod_keys_obj)},
+    {MP_ROM_QSTR(MP_QSTR_keys_held), MP_ROM_PTR(&mod_keys_held_obj)},
     {MP_ROM_QSTR(MP_QSTR_screen), MP_ROM_PTR(&mod_screen_obj)},
     {MP_ROM_QSTR(MP_QSTR_rgb), MP_ROM_PTR(&mod_rgb_obj)},
     {MP_ROM_QSTR(MP_QSTR_group), MP_ROM_PTR(&mod_group_obj)},

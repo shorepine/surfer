@@ -26,6 +26,20 @@ bool surfer_port_poll_key(surfer_key *out)
     return true;
 }
 
+int surfer_port_keys_held(surfer_key *out, int max)
+{
+    surf_sdl_key k[8];
+    if (max > 8)
+        max = 8;
+    int n = surf_hal_sdl_keys_held(k, max);
+    for (int i = 0; i < n; i++) {
+        out[i].kind = k[i].kind;
+        out[i].shift = k[i].shift;
+        memcpy(out[i].utf8, k[i].utf8, sizeof out[i].utf8);
+    }
+    return n;
+}
+
 bool surfer_port_screenshot(const char *path)
 {
     return surf_hal_sdl_dump_ppm(path);

@@ -46,6 +46,37 @@ static void push_key(uint8_t kind, bool shift, const char *utf8)
     S.key_w = next;
 }
 
+int surf_hal_sdl_keys_held(surf_sdl_key *out, int max)
+{
+    const Uint8 *st = SDL_GetKeyboardState(NULL);
+    bool shift = (SDL_GetModState() & KMOD_SHIFT) != 0;
+    int n = 0;
+    static const struct { int sc; uint8_t kind; } SPECIAL[] = {
+        {SDL_SCANCODE_LEFT, SURF_KEY_LEFT},   {SDL_SCANCODE_RIGHT, SURF_KEY_RIGHT},
+        {SDL_SCANCODE_UP, SURF_KEY_UP},       {SDL_SCANCODE_DOWN, SURF_KEY_DOWN},
+        {SDL_SCANCODE_PAGEUP, SURF_KEY_PGUP}, {SDL_SCANCODE_PAGEDOWN, SURF_KEY_PGDN},
+        {SDL_SCANCODE_HOME, SURF_KEY_HOME},   {SDL_SCANCODE_END, SURF_KEY_END},
+        {SDL_SCANCODE_RETURN, SURF_KEY_ENTER},
+        {SDL_SCANCODE_BACKSPACE, SURF_KEY_BACKSPACE},
+        {SDL_SCANCODE_DELETE, SURF_KEY_DELETE},
+    };
+    for (size_t i = 0; i < sizeof SPECIAL / sizeof *SPECIAL && n < max; i++)
+        if (st[SPECIAL[i].sc])
+            out[n++] = (surf_sdl_key){.kind = SPECIAL[i].kind, .shift = shift};
+    if (st[SDL_SCANCODE_SPACE] && n < max)
+        out[n++] = (surf_sdl_key){.kind = SURF_KEY_TEXT, .shift = shift,
+                                  .utf8 = {' '}};
+    for (int i = 0; i < 26 && n < max; i++)
+        if (st[SDL_SCANCODE_A + i])
+            out[n++] = (surf_sdl_key){.kind = SURF_KEY_TEXT, .shift = shift,
+                                      .utf8 = {(char)((shift ? 'A' : 'a') + i)}};
+    for (int i = 0; i < 10 && n < max; i++)
+        if (st[SDL_SCANCODE_1 + i])
+            out[n++] = (surf_sdl_key){.kind = SURF_KEY_TEXT, .shift = shift,
+                                      .utf8 = {"1234567890"[i]}};
+    return n;
+}
+
 bool surf_hal_sdl_poll_key(surf_sdl_key *out)
 {
     if (S.key_r == S.key_w)

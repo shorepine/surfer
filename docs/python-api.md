@@ -23,6 +23,7 @@ surfer.init(w=1024, h=600)   # open the display; call once, first
 surfer.tick()                # pump input, run animations, compose, present
                              # → False when the window wants to close (Esc)
 surfer.keys()                # drain pending key events → [(kind, text, shift), ...]
+surfer.keys_held()           # keys DOWN right now → ((kind, text), ...) — for games
 surfer.screen()              # the root Node
 surfer.rgb(r, g, b)          # 0-255 each → packed RGB565 color int
 surfer.screenshot(path)      # dump the framebuffer as binary PPM → bool
@@ -294,6 +295,13 @@ surfer.KEY_END     surfer.KEY_BACKSPACE  surfer.KEY_DELETE  surfer.KEY_ENTER
 
 surfer.TOUCH_DOWN  surfer.TOUCH_MOVE  surfer.TOUCH_UP
 ```
+
+`surfer.keys_held()` returns the keys currently held down — state, not
+events, up to 8 at once. Poll it every frame for game controls: it has
+no repeat delay, and it's what lets a ship thrust and fire at the same
+time (the parallax flight model — velocity + drag from held arrows —
+is the reference). Use `keys()` for typing, `keys_held()` for driving;
+call `keys()` once per frame anyway to drain the event queue.
 
 Key events from `surfer.keys()` are `(kind, text, shift)`; `text` holds
 the typed characters when `kind == KEY_TEXT`, else `""`.

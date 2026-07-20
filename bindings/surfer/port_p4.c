@@ -256,6 +256,11 @@ bool surfer_port_poll_key(surfer_key *out)
     return usb_kbd_poll(out);
 }
 
+int surfer_port_keys_held(surfer_key *out, int max)
+{
+    return surfer_usb_kbd_held(out, max);
+}
+
 bool surfer_port_screenshot(const char *path)
 {
     /* No C-side path: MicroPython's VFS is not IDF's. Use
