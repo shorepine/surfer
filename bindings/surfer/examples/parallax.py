@@ -165,15 +165,95 @@ def main():
     ship.scale = 0.55
     ship.rot = 270          # art points up; face the direction of travel
     scene.add(ship)
-    base_y = SKY_H + MT_H - ship.h - 40
+    XMIN, XMAX = 8, W * 2 // 3 - ship.w   # nose stays left of the 2/3 line
+    YMIN, YMAX = 16, SKY_H + MT_H - ship.h + 24
+    pos = [180, SKY_H + MT_H - ship.h - 40]
+    ship.y_pos = pos[1]
+
+    # laser pool: 6 circle shots, each an A8 mask with its own cycling
+    # phase (purple -> pink -> green). Tiny masks: shots ride the fast
+    # bands, and a moving overlay costs its bbox every frame.
+    shots = []
+    for i in range(6):
+        m = surfer.image_new(16, 16, surfer.A8)
+        m.circle(8, 8, 5, (0xffff, 255))
+        m.circle(8, 8, 7, (0xffff, 90), 2)    # soft outer glow ring
+        sp = surfer.sprite(m, 0, 0)
+        sp.hidden = True
+        scene.add(sp)
+        shots.append({"s": sp, "m": m, "x": 0, "y": 0, "live": False})
+    cool = [0]
+
+    LASER = ((172, 64, 255), (255, 96, 208), (96, 255, 128))
+
+    def laser_color(t):
+        i = int(t * 3) % 3
+        a, b = LASER[i], LASER[(i + 1) % 3]
+        u = t * 3 - int(t * 3)
+        return surfer.rgb(int(a[0] + (b[0] - a[0]) * u),
+                          int(a[1] + (b[1] - a[1]) * u),
+                          int(a[2] + (b[2] - a[2]) * u))
+
+    try:
+        import parallax_auto        # optional test autopilot: keys(frame)
+        auto_keys = parallax_auto.keys
+    except ImportError:
+        auto_keys = None
 
     state = {"frames": 0, "t0": time.ticks_ms(), "n": 0}
 
     def _step():
         f = state["frames"] = state["frames"] + 1
+
+        # arrows fly the ship, space shoots (max 6 live, cooldown-spaced)
+        if cool[0] > 0:
+            cool[0] -= 1
+        events = auto_keys(f) if auto_keys else surfer.keys()
+        for kind, text, shift in events:
+            if kind == surfer.KEY_LEFT:
+                pos[0] -= 14
+            elif kind == surfer.KEY_RIGHT:
+                pos[0] += 14
+            elif kind == surfer.KEY_UP:
+                pos[1] -= 12
+            elif kind == surfer.KEY_DOWN:
+                pos[1] += 12
+            elif kind == surfer.KEY_TEXT and text == " " and cool[0] == 0:
+                for sh in shots:
+                    if not sh["live"]:
+                        sh["live"] = True
+                        sh["x"] = pos[0] + ship.w
+                        sh["y"] = pos[1] + ship.h // 2 - 8
+                        sh["s"].hidden = False
+                        cool[0] = 8
+                        break
+        pos[0] = min(max(pos[0], XMIN), XMAX)
+        pos[1] = min(max(pos[1], YMIN), YMAX)
+
+        # forward position sets the pace: 0.5x at the left edge up to
+        # 2x at the 2/3 line — pushing ahead feels like accelerating
+        boost = 0.5 + 1.5 * (pos[0] - XMIN) / (XMAX - XMIN)
         for i, l in enumerate(layers):
-            offs[i] = (offs[i] + speeds[i]) % SW
+            offs[i] = (offs[i] + speeds[i] * boost) % SW
             l.set_offset(offs[i])
+
+        # overlays move only AFTER the layers shift: a fast layer heals
+        # the smear at each overlay's position as of set_offset time, so
+        # shift-then-move keeps old ghosts inside the healed region
+        ship.x_pos = pos[0]
+        ship.y_pos = pos[1]
+
+        for k, sh in enumerate(shots):
+            if not sh["live"]:
+                continue
+            sh["x"] += 16
+            if sh["x"] > W:
+                sh["live"] = False
+                sh["s"].hidden = True
+                continue
+            sh["m"].tint = laser_color((f * 0.02 + k / 3.0) % 1.0)
+            sh["s"].x_pos = sh["x"]   # the move damages; tint rides along
+            sh["s"].y_pos = sh["y"]
 
         for s, mask, bx, bw, phase in lavas:
             sx = (bx - offs[1]) % SW
@@ -187,8 +267,6 @@ def main():
             glow = 0.5 + 0.5 * math.sin(f * 0.11 + phase)
             mask.tint = surfer.rgb(255, int(60 + 165 * glow), int(34 * glow))
             s.damage()
-
-        ship.y_pos = base_y + int(26 * math.sin(f / 19.0)) + int(8 * math.sin(f / 5.3))
 
         state["n"] += 1
         now = time.ticks_ms()

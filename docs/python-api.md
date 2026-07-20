@@ -209,6 +209,11 @@ g.bezier([(0,90), (50,0), (100,90)], color, 4)       # 3 pts quadratic
 g.bezier([p0, c0, c1, p1], color, 4)                 # 4 pts cubic
 ```
 
+Order matters when overlays move over a fast-scrolling layer: call the
+layer's `set_offset` FIRST, then write the overlay positions. The layer
+heals the smear under each overlay where it sits at `set_offset` time —
+move-then-shift leaves a trail of ghost slivers behind fast movers.
+
 `import parallax` shows the combination: every mountain is gradient
 polys (no art), and the volcanoes' lava veins are bezier strokes in A8
 masks with cycling tints. Keep tint-cycled overlay masks CROPPED to
