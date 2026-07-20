@@ -69,7 +69,10 @@ src/text/               atlas text, wrap, textinput logic
 src/hal/sdl/  src/hal/p4/  src/hal/web/
 bindings/surfer/modsurfer.c
 tools/surfpack.py       asset + font atlas packer
-assets/                 source art (PNG/Blender) → packed by surfpack
+assets/                 source art; assets/kenney/lib/ is the CC0 sprite
+                        library — 40k Kenney sprites with lib/index.tsv
+                        (path → description → WxH) for finding art by
+                        grepping descriptions instead of looking at pixels
 ports/esp32p4/          ESP-IDF project wrapping the p4 hal
 demos/
 ```

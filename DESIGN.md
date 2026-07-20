@@ -254,6 +254,29 @@ its own task, only `present`/PPA waits move, not callbacks.)
    (the SRM engine can't blend and the blend engine can't scale); sdl is a
    nearest-neighbor inverse-mapping loop. Only transformed sprites use it;
    the 1:1 compositor path is unchanged.
+
+   **Measured sprite limits on hardware** (ESP32-P4-Function-EV-Board,
+   1024×600, IDF 5.5.1, MicroPython-driven — 2–3 property writes per
+   sprite per frame included, i.e. the honest tulip-app numbers; 100-frame
+   sweeps of independently moving ARGB8888 sprites):
+
+   | scenario | 60 fps ceiling | marginal cost/sprite |
+   |---|---|---|
+   | 28×28 identity | ~95–100 sprites | ~130 µs |
+   | 101×84 identity | ~27–30 sprites | ~410 µs |
+   | ~150 px scale 1.5 + tumbling | ~7 sprites | ~1.6 ms |
+   | 404×336 scale 4 + tumbling | 1–2 sprites | ~7.5 ms |
+
+   Two regimes: small sprites are **op-limited** (~85 µs PPA floor per op;
+   a moving sprite ≈ bg fill + blend + damage-forward share), so the small
+   ceiling is a count, ~100/frame. Large sprites are **bandwidth-limited**:
+   ~250k moving identity px/frame at 60 fps (~40% of the screen), and
+   roughly half that (~130–150k px) transformed — the SRM+blend two-pass
+   touches each pixel ~5× (SRM write, blend 2r+1w, bg fill, forward copy)
+   against the same ~360 MB/s PSRAM budget scanout shares. Static sprites
+   are free after first paint; the 512-node pool caps existence, not
+   motion. Obvious M8+ optimization if transformed counts matter: cache
+   the SRM output per sprite and re-blend until scale/rot changes.
 5. **License.** DECIDED: MIT (stb is public domain/MIT), chosen at first
    public push.
 
