@@ -11,3 +11,8 @@ CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
 # per-core CPU%% for surfer.cpu(): idle-task runtime counters
 CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER=y
+# external USB hub support (keyboard + joystick share one hub). LS-
+# behind-hub is default-on in IDF 5.5; the explicit EXT_PORT_SUPPORT_LS
+# knob that older Tulip used no longer exists here.
+CONFIG_USB_HOST_HUBS_SUPPORTED=y
+CONFIG_USB_HOST_HUB_MULTI_LEVEL=y

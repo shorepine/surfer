@@ -25,7 +25,11 @@ static struct {
     QueueHandle_t            q;      /* surfer_key */
     uint8_t                  prev[6];
     uint8_t                  mods;
-    uint8_t                  addr_pending;
+    /* NEW_DEV addresses waiting to be opened. A hub enumerates its
+     * downstream devices as separate events (keyboard + joystick), so a
+     * single slot would drop one — this is a small ring. */
+    uint8_t                  addr_q[8];
+    volatile uint8_t         addr_head, addr_tail;
     /* software key repeat (HID boot reports carry state, not repeats) */
     uint8_t                  held_usage;
     uint8_t                  held_mods;
@@ -219,7 +223,11 @@ static void client_cb(const usb_host_client_event_msg_t *msg, void *arg)
 {
     (void)arg;
     if (msg->event == USB_HOST_CLIENT_EVENT_NEW_DEV) {
-        K.addr_pending = msg->new_dev.address;
+        uint8_t nt = (uint8_t)((K.addr_tail + 1) % 8);
+        if (nt != K.addr_head) {   /* drop only if the ring is full */
+            K.addr_q[K.addr_tail] = msg->new_dev.address;
+            K.addr_tail = nt;
+        }
     } else if (msg->event == USB_HOST_CLIENT_EVENT_DEV_GONE) {
         if (K.dev == msg->dev_gone.dev_hdl) {
             usb_host_interface_release(K.client, K.dev, K.iface);
@@ -257,9 +265,9 @@ static void kbd_task(void *arg)
         uint32_t flags;
         usb_host_lib_handle_events(1, &flags);
         usb_host_client_handle_events(K.client, 1);
-        if (K.addr_pending) {
-            uint8_t a = K.addr_pending;
-            K.addr_pending = 0;
+        while (K.addr_head != K.addr_tail) {
+            uint8_t a = K.addr_q[K.addr_head];
+            K.addr_head = (uint8_t)((K.addr_head + 1) % 8);
             open_device(a);
         }
     }
