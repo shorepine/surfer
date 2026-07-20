@@ -124,12 +124,15 @@ typedef struct {
     void (*scroll_rect)(surf_rect r, int16_t dy);
     /* Streaming band shift for scrolling layers: move the band's content
      * by (sx, sy) relative to the LAST PRESENTED frame. Contract: the
-     * caller shifts every frame while the layer is moving, damages only
-     * the exposed slivers, and damages the whole band once when motion
-     * stops — in exchange the backend may skip its usual write-back
-     * bookkeeping for the band (on the P4 this is one cross-buffer DMA2D
-     * copy and no damage-forward, the difference between 19 and 60 fps).
-     * Optional; NULL means layers always repaint. */
+     * caller shifts EVERY frame while streaming — (0, 0) on sub-pixel
+     * frames, which must refresh the band unchanged (a crawling layer
+     * must not pay a repaint per pixel; measured as fps tracking scroll
+     * speed) — damages only the exposed slivers, and repaints the whole
+     * band once when streaming ends. In exchange the backend may skip
+     * its usual write-back bookkeeping for the band (on the P4 this is
+     * one cross-buffer DMA2D copy and no damage-forward, the difference
+     * between 19 and 60 fps). Optional; NULL means layers always
+     * repaint. */
     void (*band_shift)(surf_rect r, int16_t sx, int16_t sy);
 } surf_hal;
 

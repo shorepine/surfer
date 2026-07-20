@@ -312,6 +312,17 @@ its own task, only `present`/PPA waits move, not callbacks.)
    Single-buffer has no pristine source for the copy, so band_shift is
    triple-only (layers fall back to full repaint there).
 
+   **Sub-pixel frames stream a zero shift, never a heal.** A fast
+   layer (or fast-pan camera) advancing at <1 px/frame only shifts on
+   integer steps; the frame after each step used to run the stop-heal —
+   a full-band repaint per pixel of travel. Measured: parallax fps
+   tracked the ship's x position (which sets scroll speed) — 52 at 0.5x,
+   45 at ~1x (worst: shift/heal alternating), 61-69 at 2x where every
+   frame shifts and nothing heals. Now a dx == 0 frame while streaming
+   issues band_shift(0, 0) — one band refresh copy, position-independent
+   cost — and the heal repaint runs only when streaming genuinely ends
+   (fast mode off, hidden, detached). All positions: 59-70 fps.
+
    **The dirty list is a budget — movers cost one entry, not two.**
    surf_node_set_pos damages the UNION of old+new when the move wastes
    little area (per-frame movers slide a few px; the two rects are

@@ -361,12 +361,24 @@ void surf_sprite_set_src(surf_node *n, surf_rect src)
     bool pan_only = src.w == old.w && src.h == old.h;
 
     if (pan_only && dx == 0 && dy == 0) {
-        /* no-op call: if the previous change shifted, the band must
-         * repaint once — backends skip write-back bookkeeping for
-         * streaming bands (hal contract, same as layers) */
+        /* No-op call while streaming: refresh the band with a ZERO
+         * shift, not a repaint — a camera crawling at sub-pixel speed
+         * calls this between every 1px step, and a repaint per step is
+         * what made parallax fps track the scroll speed (45-69 fps by
+         * ship x, measured). The zero shift keeps the stream alive at
+         * the cost of one band copy; the heal (full repaint) only runs
+         * when streaming can't continue. */
         if (n->u.sprite.pan_shifted) {
-            n->u.sprite.pan_shifted = false;
-            surf_damage_subtree(n);
+            bool alive = n->u.sprite.fast_pan && surf_g.hal->band_shift &&
+                         surf_node_attached(n) && !(n->flags & SURF_NF_HIDDEN);
+            if (alive) {
+                int16_t zx, zy;
+                surf_node_abs_pos(n, &zx, &zy);
+                surf_g.hal->band_shift((surf_rect){zx, zy, n->w, n->h}, 0, 0);
+            } else {
+                n->u.sprite.pan_shifted = false;
+                surf_damage_subtree(n);
+            }
         }
         return;
     }
@@ -504,12 +516,19 @@ void surf_layer_set_offset(surf_node *n, int32_t off_q16)
     n->u.layer.off_q16 = off_q16;
     int32_t dx = (off_q16 >> 16) - old_px;
     if (dx == 0) {
-        /* sub-pixel: nothing moves on screen. But if the previous change
-         * shifted, the band must repaint once — backends skip their
-         * write-back bookkeeping for streaming bands (hal contract). */
+        /* Sub-pixel frame while streaming: zero shift, not a repaint
+         * (same rule and same measured reason as sprite fast pan). */
         if (n->u.layer.shifted) {
-            n->u.layer.shifted = false;
-            surf_damage_subtree(n);
+            bool alive = n->u.layer.fast && surf_g.hal->band_shift &&
+                         surf_node_attached(n) && !(n->flags & SURF_NF_HIDDEN);
+            if (alive) {
+                int16_t zx, zy;
+                surf_node_abs_pos(n, &zx, &zy);
+                surf_g.hal->band_shift((surf_rect){zx, zy, n->w, n->h}, 0, 0);
+            } else {
+                n->u.layer.shifted = false;
+                surf_damage_subtree(n);
+            }
         }
         return;
     }

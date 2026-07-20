@@ -52,15 +52,20 @@ void run_layer_tests(void)
     }
     OK(saw_shift && saw_sliver);
 
-    /* sub-pixel move after a shift: one full-band repaint (stop rule) */
+    /* sub-pixel move after a shift: the stream stays alive with a ZERO
+     * band shift — no full repaint (a crawling layer must not pay a
+     * repaint per pixel) */
     nops = 0;
     surf_layer_set_offset(l, (103 << 16) + 100);
     surf_tick();
-    bool full_repaint = false;
-    for (int i = 0; i < nops; i++)
+    bool zero_shift = false, full_repaint = false;
+    for (int i = 0; i < nops; i++) {
+        if (ops[i].op == 'S' && ops[i].dst.x == 0 && ops[i].dst.y == 0)
+            zero_shift = true;
         if (ops[i].op == 'B' && ops[i].dst.x == 0 && ops[i].src.w >= 150)
             full_repaint = true;
-    OK(full_repaint);
+    }
+    OK(zero_shift && !full_repaint);
 
     /* overlay sibling gets damaged (expanded) when the band shifts */
     surf_node *ship = surf_rect_new(50, 20, 20, 10, 0x1234);
@@ -115,11 +120,23 @@ void run_layer_tests(void)
     OK(pan_shift && svert && shorz);
     OK(hero_redraw);
 
-    /* same-value call after a shift: heals with one full repaint */
+    /* same-value call after a shift: zero shift keeps streaming; the
+     * heal repaint only runs when streaming can't continue */
     nops = 0;
     surf_sprite_set_src(cam, (surf_rect){53, 52, 200, 100});
     surf_tick();
-    bool full = false;
+    bool zero = false, full = false;
+    for (int i = 0; i < nops; i++) {
+        if (ops[i].op == 'S' && ops[i].dst.x == 0 && ops[i].dst.y == 0)
+            zero = true;
+        if (ops[i].op == 'B' && ops[i].src.w == 200 && ops[i].src.h == 100)
+            full = true;
+    }
+    OK(zero && !full);
+    surf_sprite_set_fast_pan(cam, false);       /* streaming off... */
+    surf_sprite_set_src(cam, (surf_rect){53, 52, 200, 100});
+    surf_tick();                                /* ...now it heals */
+    full = false;
     for (int i = 0; i < nops; i++)
         if (ops[i].op == 'B' && ops[i].src.w == 200 && ops[i].src.h == 100)
             full = true;
