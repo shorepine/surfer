@@ -28,7 +28,10 @@ typedef struct {
     char    utf8[8];
 } surfer_key;
 
-const surf_hal *surfer_port_init(int16_t w, int16_t h);
+/* single_buffer: p4 only — compose directly into the scan buffer (best
+ * for full-screen-every-frame animation, DESIGN.md §5.6); ignored on
+ * hosts without the choice. */
+const surf_hal *surfer_port_init(int16_t w, int16_t h, bool single_buffer);
 bool surfer_port_pump(void);   /* false = the host wants to quit */
 bool surfer_port_poll_key(surfer_key *out);
 bool surfer_port_screenshot(const char *path);

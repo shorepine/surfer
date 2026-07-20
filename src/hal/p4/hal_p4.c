@@ -601,7 +601,41 @@ void surf_hal_p4_sync(const void *buf, size_t bytes)
                     ESP_CACHE_MSYNC_FLAG_DIR_C2M);
 }
 
-static const surf_hal hal_p4 = {
+/* Streaming band shift (layers): ONE cross-buffer DMA2D copy from the
+ * just-presented frame at the shifted offset — no overlap hazard in
+ * either direction, and per the hal contract present does NOT forward
+ * the band (next frame's shift rebuilds it from newest). Triple-buffer
+ * only: single-buffer has no pristine source, so layers there fall back
+ * to full repaint (the vtable entry is nulled at init). */
+static void h_band_shift(surf_rect r, int16_t sx, int16_t sy)
+{
+    if (!S.fbcpy || S.nfbs != 3)
+        return;
+    int16_t asx = (int16_t)(sx < 0 ? -sx : sx);
+    int16_t asy = (int16_t)(sy < 0 ? -sy : sy);
+    int16_t w = (int16_t)(r.w - asx), h = (int16_t)(r.h - asy);
+    if (w <= 0 || h <= 0)
+        return;
+    surf_rect src = {
+        (int16_t)(r.x + (sx < 0 ? asx : 0)),
+        (int16_t)(r.y + (sy < 0 ? asy : 0)),
+        w, h,
+    };
+    cross_copy(S.cfg.scan_fbs[S.last_flip], src,
+               (int16_t)(r.x + (sx > 0 ? sx : 0)),
+               (int16_t)(r.y + (sy > 0 ? sy : 0)));
+    /* DMA wrote behind the cache: invalidate the band so later CPU
+     * writes (sliver compose is PPA, but textgrid-style writes could
+     * follow) never merge against stale lines */
+    uintptr_t lo = (uintptr_t)S.fb + (uintptr_t)r.y * S.cfg.w * 2;
+    uintptr_t hi = lo + (uintptr_t)r.h * S.cfg.w * 2;
+    lo &= ~(uintptr_t)(P4_ALIGN - 1);
+    hi = (hi + P4_ALIGN - 1) & ~(uintptr_t)(P4_ALIGN - 1);
+    esp_cache_msync((void *)lo, hi - lo, ESP_CACHE_MSYNC_FLAG_DIR_M2C);
+    /* deliberately NOT S.scrolled: the band heals itself every frame */
+}
+
+static surf_hal hal_p4 = {
     .fill = h_fill,
     .blit = h_blit,
     .blend = h_blend,
@@ -614,6 +648,7 @@ static const surf_hal hal_p4 = {
     .free_image = h_free_image,
     .fb_ptr = h_fb_ptr,
     .scroll_rect = h_scroll_rect,
+    .band_shift = h_band_shift,
 };
 
 const surf_hal *surf_hal_p4_init(const surf_hal_p4_cfg *cfg)
@@ -647,6 +682,9 @@ const surf_hal *surf_hal_p4_init(const surf_hal_p4_cfg *cfg)
         if (esp_lcd_dpi_panel_register_event_callbacks(cfg->panel, &cbs, NULL) != ESP_OK)
             return NULL;
     }
+
+    /* streaming layers need the just-presented buffer as source */
+    hal_p4.band_shift = S.nfbs == 3 ? h_band_shift : NULL;
 
     ppa_client_config_t fill_c = {.oper_type = PPA_OPERATION_FILL};
     ppa_client_config_t srm_c = {.oper_type = PPA_OPERATION_SRM};

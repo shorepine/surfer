@@ -4,8 +4,9 @@
 #include "surfer_port.h"
 #include "hal_sdl.h"
 
-const surf_hal *surfer_port_init(int16_t w, int16_t h)
+const surf_hal *surfer_port_init(int16_t w, int16_t h, bool single_buffer)
 {
+    (void)single_buffer;  /* SDL owns presentation; nothing to choose */
     return surf_hal_sdl_init(w, h, "surfer");
 }
 

@@ -219,7 +219,7 @@ static bool touch_poll(int16_t *x, int16_t *y)
 
 /* ---- surfer_port ---- */
 
-const surf_hal *surfer_port_init(int16_t w, int16_t h)
+const surf_hal *surfer_port_init(int16_t w, int16_t h, bool single_buffer)
 {
     (void)w; (void)h;  /* the panel is what it is */
     if (display_init() != ESP_OK)
@@ -237,6 +237,7 @@ const surf_hal *surfer_port_init(int16_t w, int16_t h)
         .w = LCD_W,
         .h = LCD_H,
         .touch_poll = touch_poll,
+        .single_buffer = single_buffer,
     };
     return surf_hal_p4_init(&cfg);
 }

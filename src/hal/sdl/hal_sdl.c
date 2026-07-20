@@ -276,6 +276,45 @@ static void h_scroll_rect(surf_rect r, int16_t dy)
     }
 }
 
+static void h_band_shift(surf_rect r, int16_t sx, int16_t sy)
+{
+    /* single software fb: an overlap-safe memmove per row; the present
+     * scroll catch-up (has_scrolled) uploads the whole band after */
+    if (sx == 0 && sy == 0)
+        return;
+    int16_t w = r.w - (int16_t)(sx < 0 ? -sx : sx);
+    int16_t h = r.h - (int16_t)(sy < 0 ? -sy : sy);
+    if (w <= 0 || h <= 0)
+        return;
+    int16_t src_x = (int16_t)(r.x + (sx < 0 ? -sx : 0));
+    int16_t src_y = (int16_t)(r.y + (sy < 0 ? -sy : 0));
+    int16_t dst_x = (int16_t)(r.x + (sx > 0 ? sx : 0));
+    int16_t dst_y = (int16_t)(r.y + (sy > 0 ? sy : 0));
+    if (dst_y <= src_y) {
+        for (int y = 0; y < h; y++)
+            memmove(S.fb + (dst_y + y) * S.w + dst_x,
+                    S.fb + (src_y + y) * S.w + src_x, (size_t)w * 2);
+    } else {
+        for (int y = h - 1; y >= 0; y--)
+            memmove(S.fb + (dst_y + y) * S.w + dst_x,
+                    S.fb + (src_y + y) * S.w + src_x, (size_t)w * 2);
+    }
+    if (S.has_scrolled) {
+        int16_t x1 = S.scrolled.x < r.x ? S.scrolled.x : r.x;
+        int16_t y1 = S.scrolled.y < r.y ? S.scrolled.y : r.y;
+        int16_t x2 = S.scrolled.x + S.scrolled.w > r.x + r.w
+                         ? (int16_t)(S.scrolled.x + S.scrolled.w)
+                         : (int16_t)(r.x + r.w);
+        int16_t y2 = S.scrolled.y + S.scrolled.h > r.y + r.h
+                         ? (int16_t)(S.scrolled.y + S.scrolled.h)
+                         : (int16_t)(r.y + r.h);
+        S.scrolled = (surf_rect){x1, y1, (int16_t)(x2 - x1), (int16_t)(y2 - y1)};
+    } else {
+        S.scrolled = r;
+        S.has_scrolled = true;
+    }
+}
+
 static void *h_alloc_image(size_t bytes)
 {
     void *p = NULL;
@@ -302,6 +341,7 @@ static const surf_hal hal_sdl = {
     .free_image = h_free_image,
     .fb_ptr = h_fb_ptr,
     .scroll_rect = h_scroll_rect,
+    .band_shift = h_band_shift,
 };
 
 /* ---- host glue ---- */

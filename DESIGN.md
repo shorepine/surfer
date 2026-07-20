@@ -277,6 +277,24 @@ its own task, only `present`/PPA waits move, not callbacks.)
    are free after first paint; the 512-node pool caps existence, not
    motion. Obvious M8+ optimization if transformed counts matter: cache
    the SRM output per sprite and re-blend until scale/rot changes.
+
+   **Full-screen layer scrolling (parallax), measured.** Recomposing
+   three stacked full-screen layers per frame (opaque sky blit + ARGB
+   mountain blend + ground + damage-forward) is bandwidth-death:
+   **19 fps** triple-buffer, 24 fps single. The winning shape is the
+   `surf_layer` node + `band_shift` hal op: layers are opaque strips in
+   vertically DISJOINT bands; each frame a moving band is ONE
+   cross-buffer DMA2D copy from the just-presented frame at the shifted
+   offset (no overlap hazard, works both directions) plus a sliver
+   repaint from the strip. Present deliberately does NOT forward
+   streaming bands — the next frame's shift rebuilds them from newest,
+   which is what makes the arithmetic work; a band that stops moving
+   repaints once (core rule). Overlay sprites are damaged (expanded by
+   the shift) by the layer as it moves. Measured: the 3-layer parallax
+   demo + bobbing ship runs **63–65 fps** (15.7 ms/frame) on the P4 in
+   triple-buffer mode — 3.3× the naive path, over the panel rate.
+   Single-buffer has no pristine source for the copy, so band_shift is
+   triple-only (layers fall back to full repaint there).
 5. **License.** DECIDED: MIT (stb is public domain/MIT), chosen at first
    public push.
 

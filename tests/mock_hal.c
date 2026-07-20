@@ -72,10 +72,16 @@ static void m_scroll_rect(surf_rect r, int16_t dy)
     }
 }
 
+static void m_band_shift(surf_rect r, int16_t sx, int16_t sy)
+{
+    ops[nops++] = (mock_op){.op = 'S', .r = r,
+                            .dst = {sx, sy}};
+}
+
 const surf_hal mock_hal = {
     m_fill, m_blit, m_blend, m_xform_blend, m_present,
     m_wait_idle, m_now_us, m_poll_touch, m_alloc_image, m_free_image,
-    m_fb_ptr, m_scroll_rect,
+    m_fb_ptr, m_scroll_rect, m_band_shift,
 };
 
 void mock_push_touch(surf_touch t)

@@ -155,6 +155,42 @@ The full demo is [examples/space.py](../bindings/surfer/examples/space.py)
 mixed scales, autofiring lasers — Kenney CC0 art from
 [assets/kenney/](../assets/kenney/).
 
+## Layers (scrolling backgrounds & tile maps)
+
+For parallax backgrounds and tile maps, bake your tiles into ONE wide
+strip per layer at load time, then scroll the strip as a `layer` node —
+the frame path pays one blit per layer instead of one per tile:
+
+```python
+strip = surfer.image_new(2048, 128)          # opaque; alpha=True for ARGB
+strip.fill(surfer.rgb(92, 148, 218))         # also: fill(c, x, y, w, h)
+tile = surfer.image(open("grass.png", "rb").read())
+for x in range(0, 2048, 64):
+    strip.blit(tile, x, 0)                   # load-time composition (CPU)
+tile.destroy()
+
+l = surfer.layer(strip, 0, y, 1024)          # strip, x, y, on-screen width
+screen.add(l)
+l.fast_scroll(True)
+l.set_offset(px)                             # float pixels; wraps at strip.w
+```
+
+`set_offset` wraps automatically — no two-sprite tricks. With
+`fast_scroll(True)` (needs an opaque strip; on the P4, triple-buffer
+mode) per-frame motion becomes one DMA band copy plus a sliver repaint
+instead of a full recompose: measured on the P4, a full-screen
+three-layer parallax scene is **19 fps naive vs 63–65 fps with fast
+layers**. Rules: fast layers must not overlap each other (stack them in
+disjoint horizontal bands), and anything drawn on top of a fast layer
+(the player sprite) must be a LATER SIBLING in the same parent — the
+layer damages overlays as it shifts. Sub-pixel offsets are free; a
+layer that stops moving repaints its band once.
+
+The full demo is
+[examples/parallax.py](../bindings/surfer/examples/parallax.py)
+(`import parallax` from tulip mode): sky, mountains and ground bands at
+0.1x/0.5x/1x with a bobbing ship, printing fps once a second.
+
 ## Widgets
 
 Prebuilt controls with the default baked theme. Factories (also available

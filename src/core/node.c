@@ -361,6 +361,101 @@ uint8_t surf_sprite_mirror(const surf_node *n)
     return (n && n->type == SURF_NODE_SPRITE) ? n->u.sprite.mirror : 0;
 }
 
+surf_node *surf_layer_new(const surf_image *strip, int16_t x, int16_t y,
+                          int16_t view_w)
+{
+    if (!strip || view_w <= 0)
+        return NULL;
+    surf_node *n = node_alloc(SURF_NODE_LAYER);
+    if (n) {
+        n->x = x; n->y = y; n->w = view_w; n->h = strip->h;
+        n->u.layer.strip = strip;
+        n->u.layer.off_q16 = 0;
+        n->u.layer.fast = false;
+        n->u.layer.shifted = false;
+    }
+    return n;
+}
+
+int32_t surf_layer_offset(const surf_node *n)
+{
+    return (n && n->type == SURF_NODE_LAYER) ? n->u.layer.off_q16 : 0;
+}
+
+void surf_layer_set_fast_scroll(surf_node *n, bool on)
+{
+    if (n && n->type == SURF_NODE_LAYER)
+        n->u.layer.fast = on;
+}
+
+void surf_layer_set_offset(surf_node *n, int32_t off_q16)
+{
+    if (!n || n->type != SURF_NODE_LAYER)
+        return;
+    int32_t wrap = (int32_t)n->u.layer.strip->w << 16;
+    off_q16 %= wrap;
+    if (off_q16 < 0)
+        off_q16 += wrap;
+    int32_t old_px = n->u.layer.off_q16 >> 16;
+    n->u.layer.off_q16 = off_q16;
+    int32_t dx = (off_q16 >> 16) - old_px;
+    if (dx == 0) {
+        /* sub-pixel: nothing moves on screen. But if the previous change
+         * shifted, the band must repaint once — backends skip their
+         * write-back bookkeeping for streaming bands (hal contract). */
+        if (n->u.layer.shifted) {
+            n->u.layer.shifted = false;
+            surf_damage_subtree(n);
+        }
+        return;
+    }
+    /* wrap distance: shift the short way around */
+    int32_t sw = n->u.layer.strip->w;
+    if (dx > sw / 2) dx -= sw;
+    if (dx < -sw / 2) dx += sw;
+
+    int16_t ax, ay;
+    surf_node_abs_pos(n, &ax, &ay);
+    surf_rect band = {ax, ay, n->w, n->h};
+    surf_rect on = surf_rect_intersect(band, (surf_rect){0, 0, surf_g.w, surf_g.h});
+    bool can_fast = n->u.layer.fast && surf_g.hal->band_shift &&
+                    n->u.layer.strip->opaque && surf_node_attached(n) &&
+                    !(n->flags & SURF_NF_HIDDEN) &&
+                    on.w == band.w && on.h == band.h &&
+                    dx > -band.w && dx < band.w;
+    for (const surf_node *p = n->parent; can_fast && p; p = p->parent)
+        if (p->type == SURF_NODE_SCROLLVIEW || (p->flags & SURF_NF_CLIP))
+            can_fast = false;
+    if (!can_fast) {
+        n->u.layer.shifted = false;
+        surf_damage_subtree(n);
+        return;
+    }
+
+    /* content moves opposite the offset */
+    surf_g.hal->band_shift(band, (int16_t)-dx, 0);
+    n->u.layer.shifted = true;
+    int16_t adx = (int16_t)(dx < 0 ? -dx : dx);
+    surf_rect sliver = dx > 0
+        ? (surf_rect){(int16_t)(band.x + band.w - adx), band.y, adx, band.h}
+        : (surf_rect){band.x, band.y, adx, band.h};
+    surf_dirty_add(&surf_g.dirty, sliver);
+
+    /* anything drawn over the band (later siblings) just got smeared by
+     * the shift: repaint it, expanded by the shift so the ghost goes too */
+    for (surf_node *s = n->next; s; s = s->next) {
+        if (s->flags & SURF_NF_HIDDEN)
+            continue;
+        int16_t sx, sy;
+        surf_node_abs_pos(s, &sx, &sy);
+        surf_rect r = {(int16_t)(sx - adx), sy,
+                       (int16_t)(s->w + 2 * adx), s->h};
+        r = surf_rect_intersect(r, band);
+        if (!surf_rect_empty(r))
+            surf_dirty_add(&surf_g.dirty, r);
+    }
+}
+
 void surf_group_set_clip(surf_node *g, int16_t w, int16_t h)
 {
     if (!g || g->type != SURF_NODE_GROUP)

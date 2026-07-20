@@ -113,6 +113,7 @@ typedef struct {
 
 extern const mp_obj_type_t surfer_node_type;
 extern const mp_obj_type_t surfer_widget_type;
+extern const mp_obj_type_t surfer_image_type;
 
 /* everything Python creates stays reachable from here so the GC can't
  * collect an object the C side still points at (callbacks, tree links) */
@@ -241,9 +242,19 @@ static mp_obj_t node_fast_scroll(mp_obj_t self_in, mp_obj_t on)
     /* each setter no-ops on the wrong node type */
     surf_textgrid_set_fast_scroll(node_of(self_in), mp_obj_is_true(on));
     surf_scrollview_set_fast_scroll(node_of(self_in), mp_obj_is_true(on));
+    surf_layer_set_fast_scroll(node_of(self_in), mp_obj_is_true(on));
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(node_fast_scroll_obj, node_fast_scroll);
+
+/* layer.set_offset(px) — float pixels; wraps at the strip width */
+static mp_obj_t node_set_offset(mp_obj_t self_in, mp_obj_t off)
+{
+    surf_layer_set_offset(node_of(self_in),
+                          (int32_t)(mp_obj_get_float(off) * SURF_ONE));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(node_set_offset_obj, node_set_offset);
 
 static mp_obj_t node_grid_scroll(mp_obj_t self_in, mp_obj_t rows)
 {
@@ -279,6 +290,7 @@ static const mp_rom_map_elem_t node_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_set_row), MP_ROM_PTR(&node_set_row_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_cell), MP_ROM_PTR(&node_set_cell_obj)},
     {MP_ROM_QSTR(MP_QSTR_grid_scroll), MP_ROM_PTR(&node_grid_scroll_obj)},
+    {MP_ROM_QSTR(MP_QSTR_set_offset), MP_ROM_PTR(&node_set_offset_obj)},
     {MP_ROM_QSTR(MP_QSTR_fast_scroll), MP_ROM_PTR(&node_fast_scroll_obj)},
     {MP_ROM_QSTR(MP_QSTR_scroll_to), MP_ROM_PTR(&node_scroll_to_obj)},
     {MP_ROM_QSTR(MP_QSTR_scroll_offset), MP_ROM_PTR(&node_scroll_offset_obj)},
@@ -416,8 +428,48 @@ static mp_obj_t image_destroy(mp_obj_t self_in)
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(image_destroy_obj, image_destroy);
 
+static surf_image *image_of(mp_obj_t o)
+{
+    if (!mp_obj_is_type(o, &surfer_image_type))
+        mp_raise_TypeError(MP_ERROR_TEXT("expected surfer Image"));
+    surfer_image_obj_t *io = MP_OBJ_TO_PTR(o);
+    if (!io->img)
+        mp_raise_ValueError(MP_ERROR_TEXT("image destroyed"));
+    return io->img;
+}
+
+/* img.blit(src, x, y) — load-time composition; never call per frame */
+static mp_obj_t image_blit(size_t n_args, const mp_obj_t *args)
+{
+    surf_image *dst = image_of(args[0]);
+    surf_image *src = image_of(args[1]);
+    surf_image_blit(dst, src, (surf_rect){0, 0, src->w, src->h},
+                    (int16_t)mp_obj_get_int(args[2]),
+                    (int16_t)mp_obj_get_int(args[3]));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(image_blit_obj, 4, 4, image_blit);
+
+/* img.fill(color[, x, y, w, h]) */
+static mp_obj_t image_fill(size_t n_args, const mp_obj_t *args)
+{
+    surf_image *dst = image_of(args[0]);
+    surf_rect r = {0, 0, dst->w, dst->h};
+    if (n_args >= 6) {
+        r = (surf_rect){(int16_t)mp_obj_get_int(args[2]),
+                        (int16_t)mp_obj_get_int(args[3]),
+                        (int16_t)mp_obj_get_int(args[4]),
+                        (int16_t)mp_obj_get_int(args[5])};
+    }
+    surf_image_fill(dst, r, (surf_color)mp_obj_get_int(args[1]));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(image_fill_obj, 2, 6, image_fill);
+
 static const mp_rom_map_elem_t image_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_destroy), MP_ROM_PTR(&image_destroy_obj)},
+    {MP_ROM_QSTR(MP_QSTR_blit), MP_ROM_PTR(&image_blit_obj)},
+    {MP_ROM_QSTR(MP_QSTR_fill), MP_ROM_PTR(&image_fill_obj)},
 };
 static MP_DEFINE_CONST_DICT(image_locals_dict, image_locals_table);
 
@@ -578,6 +630,9 @@ static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
 {
     int16_t w = n_args > 0 ? (int16_t)mp_obj_get_int(args[0]) : 1024;
     int16_t h = n_args > 1 ? (int16_t)mp_obj_get_int(args[1]) : 600;
+    /* p4 only, first init only: compose straight into the scan buffer —
+     * the right mode for full-screen-every-frame animation */
+    bool single = n_args > 2 && mp_obj_is_true(args[2]);
     surf_config cfg = {.max_nodes = 512, .bg = SURF_RGB(18, 20, 25)};
     if (inited) {
         /* soft reset (or repeat init): the VM dropped every Python object,
@@ -588,7 +643,7 @@ static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
             mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("surf re-init failed"));
         return mp_const_none;
     }
-    g_hal = surfer_port_init(w, h);
+    g_hal = surfer_port_init(w, h, single);
     if (!g_hal)
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("display init failed"));
     prepare_assets();
@@ -597,7 +652,7 @@ static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
     inited = true;
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_init_obj, 0, 2, mod_init);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_init_obj, 0, 3, mod_init);
 
 static mp_obj_t mod_tick(void)
 {
@@ -658,6 +713,39 @@ static mp_obj_t mod_image(mp_obj_t data_in)
     return MP_OBJ_FROM_PTR(o);
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mod_image_obj, mod_image);
+
+/* surfer.image_new(w, h, alpha=False) -> blank Image for load-time
+ * composition (bake tile maps / parallax strips into one image) */
+static mp_obj_t mod_image_new(size_t n_args, const mp_obj_t *args)
+{
+    bool alpha = n_args > 2 && mp_obj_is_true(args[2]);
+    surf_image *img = surf_image_new((int16_t)mp_obj_get_int(args[0]),
+                                     (int16_t)mp_obj_get_int(args[1]),
+                                     alpha ? SURF_FMT_ARGB8888 : SURF_FMT_RGB565);
+    if (!img)
+        mp_raise_ValueError(MP_ERROR_TEXT("image_new failed"));
+    surfer_image_obj_t *o = mp_obj_malloc(surfer_image_obj_t, &surfer_image_type);
+    o->img = img;
+    return MP_OBJ_FROM_PTR(o);
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_image_new_obj, 2, 3, mod_image_new);
+
+/* surfer.layer(image, x, y, view_w) -> wrap-scrolling strip Node;
+ * n.set_offset(px), n.fast_scroll(True) for the streaming band path */
+static mp_obj_t mod_layer(size_t n_args, const mp_obj_t *args)
+{
+    if (!mp_obj_is_type(args[0], &surfer_image_type))
+        mp_raise_TypeError(MP_ERROR_TEXT("expected surfer Image"));
+    surfer_image_obj_t *io = MP_OBJ_TO_PTR(args[0]);
+    if (!io->img)
+        mp_raise_ValueError(MP_ERROR_TEXT("image destroyed"));
+    surfer_node_obj_t *o = new_node_obj(surf_layer_new(
+        io->img, (int16_t)mp_obj_get_int(args[1]),
+        (int16_t)mp_obj_get_int(args[2]), (int16_t)mp_obj_get_int(args[3])));
+    o->img_ref = args[0];
+    return MP_OBJ_FROM_PTR(o);
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_layer_obj, 4, 4, mod_layer);
 
 /* surfer.sprite(image, x, y) -> Node with .scale / .rot */
 static mp_obj_t mod_sprite(mp_obj_t img_in, mp_obj_t x_in, mp_obj_t y_in)
@@ -858,6 +946,8 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_group), MP_ROM_PTR(&mod_group_obj)},
     {MP_ROM_QSTR(MP_QSTR_rect), MP_ROM_PTR(&mod_rect_obj)},
     {MP_ROM_QSTR(MP_QSTR_image), MP_ROM_PTR(&mod_image_obj)},
+    {MP_ROM_QSTR(MP_QSTR_image_new), MP_ROM_PTR(&mod_image_new_obj)},
+    {MP_ROM_QSTR(MP_QSTR_layer), MP_ROM_PTR(&mod_layer_obj)},
     {MP_ROM_QSTR(MP_QSTR_sprite), MP_ROM_PTR(&mod_sprite_obj)},
     {MP_ROM_QSTR(MP_QSTR_label), MP_ROM_PTR(&mod_label_obj)},
     {MP_ROM_QSTR(MP_QSTR_textgrid), MP_ROM_PTR(&mod_textgrid_obj)},

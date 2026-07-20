@@ -12,6 +12,7 @@ static bool node_opaque(const surf_node *n)
     switch (n->type) {
     case SURF_NODE_RECT:      return true;
     case SURF_NODE_SPRITE:    return n->u.sprite.img->opaque;
+    case SURF_NODE_LAYER:     return n->u.layer.strip->opaque;
     case SURF_NODE_FILMSTRIP: return n->u.strip.img->opaque;
     case SURF_NODE_NINEPATCH: return n->u.nine.img->opaque;
     case SURF_NODE_TEXTGRID:  return true;  /* bg+glyph fills every pixel */
@@ -130,6 +131,27 @@ static void paint(const surf_paint_ent *e)
                      e->vis.w, e->vis.h,
                  }, (surf_point){e->vis.x, e->vis.y});
         return;
+    case SURF_NODE_LAYER: {
+        /* wrap-scrolling strip: vis maps to <=2 source segments */
+        const surf_image *strip = n->u.layer.strip;
+        int32_t sw = strip->w;
+        int32_t sx = ((n->u.layer.off_q16 >> 16) + (e->vis.x - e->ax)) % sw;
+        if (sx < 0)
+            sx += sw;
+        int32_t remaining = e->vis.w;
+        int16_t dx = e->vis.x;
+        while (remaining > 0) {
+            int32_t seg = sw - sx < remaining ? sw - sx : remaining;
+            image_op(strip, (surf_rect){
+                         (int16_t)sx, (int16_t)(e->vis.y - e->ay),
+                         (int16_t)seg, e->vis.h,
+                     }, (surf_point){dx, e->vis.y});
+            dx = (int16_t)(dx + seg);
+            remaining -= seg;
+            sx = 0;
+        }
+        return;
+    }
     case SURF_NODE_FILMSTRIP: {
         int fx = (n->u.strip.frame % n->u.strip.per_row) * n->u.strip.fw;
         int fy = (n->u.strip.frame / n->u.strip.per_row) * n->u.strip.fh;

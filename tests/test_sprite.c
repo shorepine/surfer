@@ -84,4 +84,30 @@ void run_sprite_tests(void)
     OK(saw_mirror);
 
     surf_node_destroy(s);
+
+    /* ---- load-time image builder ---- */
+    surf_image *base = surf_image_new(64, 32, SURF_FMT_RGB565);
+    OK(base && base->opaque && base->stride % 64 == 0);
+    surf_image_fill(base, (surf_rect){0, 0, 64, 32}, SURF_RGB(255, 0, 0));
+    uint16_t *row0 = (uint16_t *)base->pixels;
+    OK(row0[0] == SURF_RGB(255, 0, 0));
+
+    surf_image *ov = surf_image_new(8, 8, SURF_FMT_ARGB8888);
+    OK(ov && !ov->opaque);
+    /* half-transparent green square */
+    for (int y = 0; y < 8; y++)
+        for (int x = 0; x < 8; x++)
+            *((uint32_t *)((uint8_t *)ov->pixels + y * ov->stride) + x) =
+                0x8000ff00u;
+    surf_image_blit(base, ov, (surf_rect){0, 0, 8, 8}, 2, 2);
+    uint16_t px = *((uint16_t *)((uint8_t *)base->pixels + 4 * base->stride) + 4);
+    /* red half-blended with green: both channels present */
+    OK(((px >> 11) & 0x1f) > 8 && ((px >> 5) & 0x3f) > 16);
+    /* outside the blit untouched */
+    OK(row0[0] == SURF_RGB(255, 0, 0));
+    /* clipping doesn't crash or write out of bounds */
+    surf_image_blit(base, ov, (surf_rect){0, 0, 8, 8}, -4, 28);
+    surf_image_blit(base, ov, (surf_rect){0, 0, 8, 8}, 62, -2);
+    surf_image_destroy(ov);
+    surf_image_destroy(base);
 }

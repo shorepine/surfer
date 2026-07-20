@@ -7,7 +7,8 @@
 #include "surf_internal.h"
 
 typedef struct {
-    char       op;  /* 'F' fill, 'B' blit, 'A' blend, 'X' xform, 'P' present */
+    char       op;  /* 'F' fill, 'B' blit, 'A' blend, 'X' xform,
+                       'S' band_shift (dst = sx,sy), 'P' present */
     surf_rect  r;   /* fill rect; xform: the dst footprint */
     surf_color c;
     const surf_image *img;

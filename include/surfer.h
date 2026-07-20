@@ -41,6 +41,17 @@ typedef struct {
 surf_image *surf_image_from_png(const void *data, size_t len);
 void        surf_image_destroy(surf_image *img);
 
+/* Load-time image composition: bake tile maps / parallax strips into one
+ * image so the frame path pays one blit per LAYER, not one per tile.
+ * These run on the CPU and must never be called per frame.
+ * surf_image_new: SURF_FMT_RGB565 = opaque (starts black),
+ * SURF_FMT_ARGB8888 starts fully transparent. blit alpha-composites
+ * src over dst (565/ARGB/A8 sources). */
+surf_image *surf_image_new(int16_t w, int16_t h, surf_format format);
+void surf_image_fill(surf_image *dst, surf_rect r, surf_color c);
+void surf_image_blit(surf_image *dst, const surf_image *src, surf_rect src_r,
+                     int16_t x, int16_t y);
+
 typedef enum {
     SURF_TOUCH_DOWN = 0,
     SURF_TOUCH_MOVE = 1,
@@ -80,6 +91,15 @@ typedef struct {
      * page of CPU-rendered text costs 46 ms but a DMA shift + one-row
      * repaint fits a 60 fps budget (DESIGN.md §5.6). */
     void (*scroll_rect)(surf_rect r, int16_t dy);
+    /* Streaming band shift for scrolling layers: move the band's content
+     * by (sx, sy) relative to the LAST PRESENTED frame. Contract: the
+     * caller shifts every frame while the layer is moving, damages only
+     * the exposed slivers, and damages the whole band once when motion
+     * stops — in exchange the backend may skip its usual write-back
+     * bookkeeping for the band (on the P4 this is one cross-buffer DMA2D
+     * copy and no damage-forward, the difference between 19 and 60 fps).
+     * Optional; NULL means layers always repaint. */
+    void (*band_shift)(surf_rect r, int16_t sx, int16_t sy);
 } surf_hal;
 
 typedef struct surf_node surf_node;
@@ -106,6 +126,18 @@ void       surf_tick(void);  /* compose dirty rects + present */
 surf_node *surf_group_new(int16_t x, int16_t y);
 surf_node *surf_rect_new(int16_t x, int16_t y, int16_t w, int16_t h, surf_color c);
 surf_node *surf_sprite_new(const surf_image *img, int16_t x, int16_t y);
+/* Layer: a horizontally wrap-scrolling strip (parallax backgrounds, tile
+ * maps baked with surf_image_new/blit). view_w is the on-screen width;
+ * the strip wraps at strip->w. Offset is Q16 pixels; fast scroll (needs
+ * an opaque strip + hal band_shift) turns per-frame motion into one DMA
+ * band copy plus a sliver repaint. Overlay nodes drawn on top of a fast
+ * layer must be LATER SIBLINGS in the same parent — the layer damages
+ * them as it shifts. Fast layers must not overlap each other. */
+surf_node *surf_layer_new(const surf_image *strip, int16_t x, int16_t y,
+                          int16_t view_w);
+void       surf_layer_set_offset(surf_node *n, int32_t off_q16);
+int32_t    surf_layer_offset(const surf_node *n);
+void       surf_layer_set_fast_scroll(surf_node *n, bool on);
 surf_node *surf_filmstrip_new(const surf_image *img, int16_t frame_w, int16_t frame_h,
                               int16_t x, int16_t y);
 surf_node *surf_ninepatch_new(const surf_image *img, int16_t x, int16_t y,
