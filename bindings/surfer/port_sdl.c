@@ -30,6 +30,11 @@ bool surfer_port_poll_key(surfer_key *out)
     return true;
 }
 
+bool surfer_port_gamepad_active(void)
+{
+    return false;   /* desktop has no USB gamepad path yet */
+}
+
 int surfer_port_keys_held(surfer_key *out, int max)
 {
     surf_sdl_key k[8];

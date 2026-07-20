@@ -1032,6 +1032,10 @@ static void pad_pump_keys(void)
 {
     if (g_pad_keys < 0)
         return;
+    /* a real gamepad owns pad 0 while it's plugged in — don't let the
+     * keyboard map zero it out every tick */
+    if (g_pad_keys == 0 && surfer_port_gamepad_active())
+        return;
     surfer_key k[8];
     int n = surfer_port_keys_held(k, 8);
     uint8_t dpad = 0;

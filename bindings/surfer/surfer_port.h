@@ -38,6 +38,9 @@ bool surfer_port_poll_key(surfer_key *out);
  * Events (poll_key) are for typing; this is for games — held state is
  * per-frame and unlimited-rollover-agnostic (move + fire together). */
 int  surfer_port_keys_held(surfer_key *out, int max);
+/* True when a USB gamepad is actively feeding the pad API (so the
+ * keyboard->pad map should yield that slot). */
+bool surfer_port_gamepad_active(void);
 /* CPU load since the previous call, one entry per core (percent).
  * Returns the core count filled (0 = unsupported on this host). */
 int  surfer_port_cpu_usage(float *pct, int max);

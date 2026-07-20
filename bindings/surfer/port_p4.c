@@ -262,6 +262,11 @@ int surfer_port_keys_held(surfer_key *out, int max)
     return surfer_usb_kbd_held(out, max);
 }
 
+bool surfer_port_gamepad_active(void)
+{
+    return surfer_usb_kbd_gamepad();
+}
+
 /* busy%% per core = 1 - idle-task runtime share, from the FreeRTOS
  * runtime counters (µs, esp_timer stats clock — sdkconfig.surfer turns
  * them on). Delta since the previous call; first call averages since

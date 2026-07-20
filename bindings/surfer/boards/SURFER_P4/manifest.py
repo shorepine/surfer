@@ -16,3 +16,5 @@ module("forest.py", base_path="$(BOARD_DIR)/../../examples")
 module("forest_assets.py", base_path="$(BOARD_DIR)/../../examples")
 # A8 tint color cycling (hardware one-entry palette): `import pulse`
 module("pulse.py", base_path="$(BOARD_DIR)/../../examples")
+
+module("padtest.py", base_path="$(BOARD_DIR)/../../examples")

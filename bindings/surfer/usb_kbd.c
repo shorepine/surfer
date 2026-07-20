@@ -13,6 +13,7 @@
 #include "esp_timer.h"
 #include "usb/usb_host.h"
 
+#include "surfer.h"   /* surf_pad_* controller API */
 #include "usb_kbd.h"
 
 #define TAG "surfer_kbd"
@@ -35,6 +36,9 @@ static struct {
     uint8_t                  held_mods;
     int64_t                  held_since_us;
     int64_t                  last_rep_us;
+    /* XInput gamepad (Xbox 360 protocol, class ff/5d/01): a fixed
+     * 20-byte report, no HID descriptor. Feeds pad slot 0. */
+    bool                     gamepad;
 } K;
 
 #define KBD_REPEAT_DELAY_US  350000
@@ -101,6 +105,44 @@ static void handle_usage(uint8_t u, uint8_t mods)
 
 static void report_cb(usb_transfer_t *t)
 {
+    if (K.gamepad) {
+        /* XInput input report: [00 14 btn1 btn2 lt rt lxLo lxHi lyLo
+         * lyHi rxLo rxHi ryLo ryHi ...]. Map straight onto pad 0. */
+        const uint8_t *r = t->data_buffer;
+        if (t->status == USB_TRANSFER_STATUS_COMPLETED &&
+            t->actual_num_bytes >= 14 && r[0] == 0x00) {
+            uint8_t b1 = r[2], b2 = r[3];
+            uint8_t dpad = 0;
+            if (b1 & 0x01) dpad |= SURF_DPAD_UP;
+            if (b1 & 0x02) dpad |= SURF_DPAD_DOWN;
+            if (b1 & 0x04) dpad |= SURF_DPAD_LEFT;
+            if (b1 & 0x08) dpad |= SURF_DPAD_RIGHT;
+            uint16_t btn = 0;
+            if (b1 & 0x10) btn |= SURF_BTN_START;
+            if (b1 & 0x20) btn |= SURF_BTN_SELECT;   /* Back */
+            if (b2 & 0x01) btn |= SURF_BTN_L;        /* LB */
+            if (b2 & 0x02) btn |= SURF_BTN_R;        /* RB */
+            if (b2 & 0x10) btn |= SURF_BTN_A;
+            if (b2 & 0x20) btn |= SURF_BTN_B;
+            if (b2 & 0x40) btn |= SURF_BTN_X;
+            if (b2 & 0x80) btn |= SURF_BTN_Y;
+            surf_pad_set_dpad(0, dpad);
+            surf_pad_set_buttons(0, btn);
+            /* sticks: int16 LE, scale to Q16 (x2); invert Y so stick-up
+             * is negative, matching screen coordinates */
+            int16_t lx = (int16_t)(r[6] | (r[7] << 8));
+            int16_t ly = (int16_t)(r[8] | (r[9] << 8));
+            int16_t rx = (int16_t)(r[10] | (r[11] << 8));
+            int16_t ry = (int16_t)(r[12] | (r[13] << 8));
+            surf_pad_set_axis(0, 0, 0, (int32_t)lx * 2);
+            surf_pad_set_axis(0, 0, 1, (int32_t)(-ly) * 2);
+            surf_pad_set_axis(0, 1, 0, (int32_t)rx * 2);
+            surf_pad_set_axis(0, 1, 1, (int32_t)(-ry) * 2);
+        }
+        if (K.dev)
+            usb_host_transfer_submit(t);
+        return;
+    }
     if (t->status == USB_TRANSFER_STATUS_COMPLETED && t->actual_num_bytes >= 8) {
         const uint8_t *r = t->data_buffer;  /* [mods, 0, k1..k6] */
         for (int i = 2; i < 8; i++) {
@@ -168,32 +210,41 @@ static void open_device(uint8_t addr)
                 ep = e;
         }
     }
+    /* No boot keyboard: is this an XInput gamepad (class ff/5d/01)? It
+     * has no HID report descriptor — just a 20-byte report on its
+     * interrupt IN endpoint. */
     if (!kbd || !ep) {
-        ESP_LOGW(TAG, "no boot keyboard interface on device %u", addr);
-        goto fail;
+        const usb_intf_desc_t *xi = NULL, *cur = NULL;
+        ep = NULL;
+        off = 0;
+        d = (const usb_standard_desc_t *)cfg;
+        while ((d = usb_parse_next_descriptor(d, cfg->wTotalLength, &off)) != NULL) {
+            if (d->bDescriptorType == USB_B_DESCRIPTOR_TYPE_INTERFACE) {
+                cur = (const usb_intf_desc_t *)d;
+            } else if (cur && !ep && !xi &&
+                       cur->bInterfaceClass == 0xff &&
+                       cur->bInterfaceSubClass == 0x5d &&
+                       d->bDescriptorType == USB_B_DESCRIPTOR_TYPE_ENDPOINT) {
+                const usb_ep_desc_t *e = (const usb_ep_desc_t *)d;
+                if ((e->bEndpointAddress & 0x80) &&
+                    (e->bmAttributes & USB_BM_ATTRIBUTES_XFERTYPE_MASK) ==
+                        USB_BM_ATTRIBUTES_XFER_INT) {
+                    ep = e;
+                    xi = cur;
+                }
+            }
+        }
+        if (!xi || !ep) {
+            ESP_LOGW(TAG, "device %u is not a keyboard or XInput pad", addr);
+            goto fail;
+        }
+        K.gamepad = true;
+        K.iface = xi->bInterfaceNumber;
+        if (usb_host_interface_claim(K.client, K.dev, K.iface, 0) != ESP_OK)
+            goto fail;
+        goto setup_in;
     }
-    K.iface = kbd->bInterfaceNumber;
-    if (usb_host_interface_claim(K.client, K.dev, K.iface, 0) != ESP_OK)
-        goto fail;
-
-    /* SET_PROTOCOL(boot): fire and forget */
-    usb_transfer_t *ctrl;
-    if (usb_host_transfer_alloc(sizeof(usb_setup_packet_t), 0, &ctrl) == ESP_OK) {
-        usb_setup_packet_t *s = (usb_setup_packet_t *)ctrl->data_buffer;
-        s->bmRequestType = 0x21;
-        s->bRequest = 0x0b;  /* SET_PROTOCOL */
-        s->wValue = 0;       /* boot */
-        s->wIndex = K.iface;
-        s->wLength = 0;
-        ctrl->num_bytes = sizeof *s;
-        ctrl->device_handle = K.dev;
-        ctrl->bEndpointAddress = 0;
-        ctrl->callback = ctrl_done_cb;
-        ctrl->context = NULL;
-        if (usb_host_transfer_submit_control(K.client, ctrl) != ESP_OK)
-            usb_host_transfer_free(ctrl);
-    }
-
+setup_in:;
     uint16_t mps = ep->wMaxPacketSize;
     if (usb_host_transfer_alloc(mps < 8 ? 8 : mps, 0, &K.xfer) != ESP_OK)
         goto fail;
@@ -204,7 +255,8 @@ static void open_device(uint8_t addr)
     K.xfer->timeout_ms = 0;
     memset(K.prev, 0, sizeof K.prev);
     if (usb_host_transfer_submit(K.xfer) == ESP_OK) {
-        ESP_LOGI(TAG, "keyboard connected (addr %u, iface %u)", addr, K.iface);
+        ESP_LOGI(TAG, "%s connected (addr %u, iface %u)",
+                 K.gamepad ? "gamepad" : "keyboard", addr, K.iface);
         return;
     }
 
@@ -237,7 +289,12 @@ static void client_cb(const usb_host_client_event_msg_t *msg, void *arg)
                 usb_host_transfer_free(K.xfer);
                 K.xfer = NULL;
             }
-            ESP_LOGI(TAG, "keyboard disconnected");
+            if (K.gamepad) {
+                K.gamepad = false;
+                surf_pad_reset(0);
+            }
+            ESP_LOGI(TAG, "%s disconnected",
+                     K.gamepad ? "gamepad" : "keyboard");
         }
     }
 }
@@ -292,6 +349,11 @@ int surfer_usb_kbd_held(surfer_key *out, int max)
         if (K.prev[i] >= 4 && usage_to_key(K.prev[i], K.mods, &out[n]))
             n++;
     return n;
+}
+
+bool surfer_usb_kbd_gamepad(void)
+{
+    return K.gamepad;
 }
 
 bool surfer_usb_kbd_poll(surfer_key *out)
