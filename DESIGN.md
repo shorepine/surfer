@@ -160,6 +160,22 @@ relative mode by default (like every DAW), configurable to angular.
 scrollview: threshold before scroll steals the gesture from children;
 momentum + edge resistance handled in core so every backend feels identical.
 
+### 2.7 Shapes (load-time vector rasterization)
+
+Vector shapes exist as a bake-time tool only (`src/core/shape.c`):
+`surf_image_poly/polyline/ellipse/bezier` rasterize anti-aliased fills
+and round-capped strokes INTO images, with solid or linear-gradient
+paints (`surf_paint`). One scanline coverage engine (nonzero winding,
+subpaths normalized to one orientation so stroke quads + join discs
+union additively; 4x vertical supersampling, exact horizontal span
+coverage). The frame path never sees a curve — a drawn image is sprite
+and layer material like any PNG, so the "no runtime vector
+rasterization" rule stands: this is how the better asset gets made.
+Drawing into an A8 image puts coverage in alpha, which composes with
+tint cycling: shapes whose color animates in hardware for the price of
+the blend they already cost. Float math and malloc are allowed inside
+shape.c for the same reason they're allowed in image.c: bake-time code.
+
 ## 3. Bindings
 
 MicroPython first. The C API is designed to be bound: one public header
@@ -295,6 +311,15 @@ its own task, only `present`/PPA waits move, not callbacks.)
    triple-buffer mode — 3.3× the naive path, over the panel rate.
    Single-buffer has no pristine source for the copy, so band_shift is
    triple-only (layers fall back to full repaint there).
+
+   **Overlay sprites on a fast band are the expensive thing**: they
+   re-blend every frame (the band moves under them), so their cost is
+   their bounding box, not their ink. Measured with the procedural-lava
+   volcanoes (A8 vein masks, tint-cycled per frame): mountain-sized
+   460x235 masks dragged parallax from 63 to ~29-40 fps; cropping the
+   masks to the ~100x200 vein column brought it to **49-56 fps** with
+   1-2 volcanoes on screen (~2 ms per visible moving overlay). Rule:
+   crop overlay masks tight, and count them.
 
    The same band_shift drives **sprite fast pan** (`surf_sprite_set_src`
    + `surf_sprite_set_fast_pan`): a screen-sized src window panned over

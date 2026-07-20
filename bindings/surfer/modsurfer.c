@@ -497,7 +497,164 @@ static mp_obj_t image_fill(size_t n_args, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(image_fill_obj, 2, 6, image_fill);
 
+/* ---- shape drawing (load-time; see surf_image_poly & co.) ----
+ * paint arg: rgb565 int | (color, alpha) | ((x0,y0,c0[,a0]), (x1,y1,c1[,a1]))
+ * for a linear gradient between two stops. */
+static surf_paint parse_paint(mp_obj_t o)
+{
+    surf_paint p = {.kind = SURF_PAINT_SOLID, .a0 = 255, .a1 = 255};
+    if (mp_obj_is_int(o)) {
+        p.c0 = p.c1 = (surf_color)mp_obj_get_int(o);
+        return p;
+    }
+    size_t n;
+    mp_obj_t *it;
+    mp_obj_get_array(o, &n, &it);
+    if (n == 2 && mp_obj_is_int(it[0])) {          /* (color, alpha) */
+        p.c0 = p.c1 = (surf_color)mp_obj_get_int(it[0]);
+        p.a0 = p.a1 = (uint8_t)mp_obj_get_int(it[1]);
+        return p;
+    }
+    if (n != 2)
+        mp_raise_ValueError(MP_ERROR_TEXT("bad paint"));
+    p.kind = SURF_PAINT_LINEAR;
+    int32_t *ax = &p.x0;
+    for (int i = 0; i < 2; i++) {                  /* two gradient stops */
+        size_t sn;
+        mp_obj_t *st;
+        mp_obj_get_array(it[i], &sn, &st);
+        if (sn != 3 && sn != 4)
+            mp_raise_ValueError(MP_ERROR_TEXT("gradient stop is (x,y,color[,alpha])"));
+        ax[i * 2] = (int32_t)(mp_obj_get_float(st[0]) * 65536);
+        ax[i * 2 + 1] = (int32_t)(mp_obj_get_float(st[1]) * 65536);
+        surf_color c = (surf_color)mp_obj_get_int(st[2]);
+        uint8_t a = sn == 4 ? (uint8_t)mp_obj_get_int(st[3]) : 255;
+        if (i == 0) { p.c0 = c; p.a0 = a; } else { p.c1 = c; p.a1 = a; }
+    }
+    return p;
+}
+
+#define Q16F(o) ((int32_t)(mp_obj_get_float(o) * 65536))
+
+/* [(x,y), ...] -> malloc'd Q16 array (caller frees) */
+static int32_t *parse_pts(mp_obj_t o, int *count)
+{
+    size_t n;
+    mp_obj_t *it;
+    mp_obj_get_array(o, &n, &it);
+    if (n < 1 || n > 4096)
+        mp_raise_ValueError(MP_ERROR_TEXT("bad point list"));
+    int32_t *xy = m_new(int32_t, n * 2);
+    for (size_t i = 0; i < n; i++) {
+        size_t pn;
+        mp_obj_t *pt;
+        mp_obj_get_array(it[i], &pn, &pt);
+        if (pn != 2)
+            mp_raise_ValueError(MP_ERROR_TEXT("points are (x, y)"));
+        xy[i * 2] = Q16F(pt[0]);
+        xy[i * 2 + 1] = Q16F(pt[1]);
+    }
+    *count = (int)n;
+    return xy;
+}
+
+/* img.poly([(x,y),...], paint) — filled, anti-aliased */
+static mp_obj_t image_poly(mp_obj_t self_in, mp_obj_t pts_in, mp_obj_t paint_in)
+{
+    surf_image *dst = image_of(self_in);
+    surf_paint p = parse_paint(paint_in);
+    int n;
+    int32_t *xy = parse_pts(pts_in, &n);
+    surf_image_poly(dst, xy, n, &p);
+    m_del(int32_t, xy, n * 2);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_3(image_poly_obj, image_poly);
+
+/* img.lines([(x,y),...], paint, width=1) — round caps and joins */
+static mp_obj_t image_lines(size_t n_args, const mp_obj_t *args)
+{
+    surf_image *dst = image_of(args[0]);
+    surf_paint p = parse_paint(args[2]);
+    int32_t w = n_args > 3 ? Q16F(args[3]) : 65536;
+    int n;
+    int32_t *xy = parse_pts(args[1], &n);
+    surf_image_polyline(dst, xy, n, w, &p);
+    m_del(int32_t, xy, n * 2);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(image_lines_obj, 3, 4, image_lines);
+
+/* img.line(x0, y0, x1, y1, paint, width=1) */
+static mp_obj_t image_line(size_t n_args, const mp_obj_t *args)
+{
+    surf_image *dst = image_of(args[0]);
+    surf_paint p = parse_paint(args[5]);
+    int32_t xy[4] = {Q16F(args[1]), Q16F(args[2]), Q16F(args[3]), Q16F(args[4])};
+    surf_image_polyline(dst, xy, 2, n_args > 6 ? Q16F(args[6]) : 65536, &p);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(image_line_obj, 6, 7, image_line);
+
+/* img.ellipse(cx, cy, rx, ry, paint, width=0) — width 0 fills */
+static mp_obj_t image_ellipse(size_t n_args, const mp_obj_t *args)
+{
+    surf_image *dst = image_of(args[0]);
+    surf_paint p = parse_paint(args[5]);
+    surf_image_ellipse(dst, Q16F(args[1]), Q16F(args[2]),
+                       Q16F(args[3]), Q16F(args[4]),
+                       n_args > 6 ? Q16F(args[6]) : 0, &p);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(image_ellipse_obj, 6, 7, image_ellipse);
+
+/* img.circle(cx, cy, r, paint, width=0) */
+static mp_obj_t image_circle(size_t n_args, const mp_obj_t *args)
+{
+    surf_image *dst = image_of(args[0]);
+    surf_paint p = parse_paint(args[4]);
+    surf_image_ellipse(dst, Q16F(args[1]), Q16F(args[2]),
+                       Q16F(args[3]), Q16F(args[3]),
+                       n_args > 5 ? Q16F(args[5]) : 0, &p);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(image_circle_obj, 5, 6, image_circle);
+
+/* img.bezier([(x,y) x3 quadratic | x4 cubic], paint, width=2) */
+static mp_obj_t image_bezier(size_t n_args, const mp_obj_t *args)
+{
+    surf_image *dst = image_of(args[0]);
+    surf_paint p = parse_paint(args[2]);
+    int n;
+    int32_t *xy = parse_pts(args[1], &n);
+    if (n != 3 && n != 4) {
+        m_del(int32_t, xy, n * 2);
+        mp_raise_ValueError(MP_ERROR_TEXT("bezier takes 3 or 4 points"));
+    }
+    int32_t c[8];
+    if (n == 4) {
+        memcpy(c, xy, sizeof c);
+    } else {  /* elevate quadratic: c1 = p0/3 + 2q/3, c2 = 2q/3 + p1/3 */
+        c[0] = xy[0]; c[1] = xy[1];
+        c[2] = (int32_t)(xy[0] / 3 + 2LL * xy[2] / 3);
+        c[3] = (int32_t)(xy[1] / 3 + 2LL * xy[3] / 3);
+        c[4] = (int32_t)(2LL * xy[2] / 3 + xy[4] / 3);
+        c[5] = (int32_t)(2LL * xy[3] / 3 + xy[5] / 3);
+        c[6] = xy[4]; c[7] = xy[5];
+    }
+    surf_image_bezier(dst, c, n_args > 3 ? Q16F(args[3]) : 131072, &p);
+    m_del(int32_t, xy, n * 2);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(image_bezier_obj, 3, 4, image_bezier);
+
 static const mp_rom_map_elem_t image_locals_table[] = {
+    {MP_ROM_QSTR(MP_QSTR_poly), MP_ROM_PTR(&image_poly_obj)},
+    {MP_ROM_QSTR(MP_QSTR_line), MP_ROM_PTR(&image_line_obj)},
+    {MP_ROM_QSTR(MP_QSTR_lines), MP_ROM_PTR(&image_lines_obj)},
+    {MP_ROM_QSTR(MP_QSTR_circle), MP_ROM_PTR(&image_circle_obj)},
+    {MP_ROM_QSTR(MP_QSTR_ellipse), MP_ROM_PTR(&image_ellipse_obj)},
+    {MP_ROM_QSTR(MP_QSTR_bezier), MP_ROM_PTR(&image_bezier_obj)},
     {MP_ROM_QSTR(MP_QSTR_destroy), MP_ROM_PTR(&image_destroy_obj)},
     {MP_ROM_QSTR(MP_QSTR_blit), MP_ROM_PTR(&image_blit_obj)},
     {MP_ROM_QSTR(MP_QSTR_fill), MP_ROM_PTR(&image_fill_obj)},
@@ -820,10 +977,11 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_image_obj, 1, 2, mod_image);
  * composition (bake tile maps / parallax strips into one image) */
 static mp_obj_t mod_image_new(size_t n_args, const mp_obj_t *args)
 {
-    bool alpha = n_args > 2 && mp_obj_is_true(args[2]);
+    /* 0/False = opaque 565, 1/True = ARGB, surfer.A8 = tintable mask */
+    mp_int_t fmt = n_args > 2 ? mp_obj_get_int(args[2]) : 0;
     surf_image *img = surf_image_new((int16_t)mp_obj_get_int(args[0]),
                                      (int16_t)mp_obj_get_int(args[1]),
-                                     alpha ? SURF_FMT_ARGB8888 : SURF_FMT_RGB565);
+                                     (surf_format)fmt);
     if (!img)
         mp_raise_ValueError(MP_ERROR_TEXT("image_new failed"));
     surfer_image_obj_t *o = mp_obj_malloc(surfer_image_obj_t, &surfer_image_type);
@@ -1095,6 +1253,7 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_TOUCH_DOWN), MP_ROM_INT(0)},
     {MP_ROM_QSTR(MP_QSTR_TOUCH_MOVE), MP_ROM_INT(1)},
     {MP_ROM_QSTR(MP_QSTR_TOUCH_UP), MP_ROM_INT(2)},
+    {MP_ROM_QSTR(MP_QSTR_A8), MP_ROM_INT(SURF_FMT_A8)},
 };
 static MP_DEFINE_CONST_DICT(surfer_module_globals, surfer_globals_table);
 

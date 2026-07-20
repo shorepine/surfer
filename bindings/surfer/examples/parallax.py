@@ -12,6 +12,13 @@
 # (the ship) must be later siblings of the layers; the layers damage
 # them as they shift.
 #
+# The mountains are PROCEDURAL: gradient-filled triangles from the shape
+# API (img.poly with linear-gradient paints), snowcaps included — no
+# mountain art anywhere. Three of them are volcanoes: their lava veins
+# are bezier strokes baked into A8 masks (coverage-with-falloff), each
+# an overlay sprite whose .tint cycles through ember colors per frame —
+# Amiga-style color cycling, one hardware blend per volcano.
+#
 # Run from tulip mode: import parallax   (desktop, P4, or web)
 import math
 import time
@@ -23,6 +30,7 @@ SW = 2048                     # strip width; % 64 == 0 so tiles seam cleanly
 SKY_H = 212                   # disjoint bands: sky / mountains / ground
 MT_H = 260
 GND_H = 128
+ST = SKY_H + MT_H             # the sky gradient spans both bands
 
 LIB = "assets/kenney/lib/"
 
@@ -40,18 +48,16 @@ def img(path):
         return surfer.image(f.read())
 
 
-SKY_BANDS = [(92, 148, 218), (104, 160, 224), (118, 172, 230),
-             (134, 184, 236), (152, 196, 242), (172, 208, 246)]
-
-
-def sky_color(y):
-    return surfer.rgb(*SKY_BANDS[min(y // 100, len(SKY_BANDS) - 1)])
+SKY_TOP = surfer.rgb(64, 108, 196)
+SKY_HOR = surfer.rgb(214, 188, 156)     # warm haze at the horizon
 
 
 def build_sky():
     sky = surfer.image_new(SW, SKY_H)
-    for i in range(len(SKY_BANDS)):
-        sky.fill(sky_color(i * 100), 0, i * 100, SW, 100)
+    # one smooth vertical gradient; the mountain band continues the same
+    # axis so the seam between the two layers is invisible
+    sky.poly([(0, 0), (SW, 0), (SW, SKY_H), (0, SKY_H)],
+             ((0, 0, SKY_TOP), (0, ST, SKY_HOR)))
     for i, name in enumerate(["cloud1", "cloud2", "cloud3", "cloud4",
                               "cloud5", "cloud6"]):
         c = img("2d/Background Elements Remastered/%s.png" % name)
@@ -61,39 +67,70 @@ def build_sky():
 
 
 def build_mountains():
-    # opaque strip: the sky gradient continues INSIDE this band (it is
-    # horizontally uniform, so it moving at 0.5x is invisible), with the
-    # ridge composited over it
+    """Gradient-triangle ranges; returns (strip, volcano list)."""
     mt = surfer.image_new(SW, MT_H)
-    for y in range(0, MT_H, 4):
-        mt.fill(sky_color(SKY_H + y), 0, y, SW, 4)
-    ridge = img("2d/Background Elements Remastered/Backgrounds/Elements/mountains.png")
-    mt.blit(ridge, 0, MT_H - ridge.h)
-    mt.blit(ridge, 1024, MT_H - ridge.h)
-    ridge.destroy()
-    for i, name in enumerate(["mountainA", "mountainB", "mountainC", "mountainB"]):
-        m = img("2d/Background Elements Remastered/Backgrounds/Elements/%s.png" % name)
-        mt.blit(m, 140 + i * 520, MT_H - m.h + 40)
-        m.destroy()
-    return mt
+    mt.poly([(0, 0), (SW, 0), (SW, MT_H), (0, MT_H)],
+            ((0, -SKY_H, SKY_TOP), (0, MT_H, SKY_HOR)))
+
+    # back ridge: hazy blue-grey, fading into the horizon color
+    for i in range(7):
+        bx = i * 300 - 40
+        bw = 380 + (i * 67) % 120
+        mh = 130 + (i * 53) % 70
+        ax = bx + bw // 2 + (i * 37) % 80 - 40
+        mt.poly([(bx, MT_H), (ax, MT_H - mh), (bx + bw, MT_H)],
+                ((ax, MT_H - mh, surfer.rgb(150, 158, 186)),
+                 (ax, MT_H, surfer.rgb(120, 132, 168))))
+
+    # front ridge: brown gradients lit from the peak; some snowcapped,
+    # three of them volcanoes (lava masks made in build_lava)
+    volcanoes = []
+    front = [(40, 460, 225, 0.42, True), (560, 420, 190, 0.55, False),
+             (1080, 480, 235, 0.45, True), (1620, 400, 205, 0.50, True)]
+    for i, (bx, bw, mh, apx, lava) in enumerate(front):
+        ax = bx + int(bw * apx)
+        ay = MT_H - mh
+        dark = surfer.rgb(78, 54, 38)
+        lit = surfer.rgb(172, 124, 74)
+        mt.poly([(bx, MT_H), (ax, ay), (bx + bw, MT_H)],
+                ((bx, MT_H, dark), (ax, ay, lit)))
+        if lava:
+            # crater notch instead of a snowcap
+            mt.poly([(ax - 16, ay + 10), (ax, ay), (ax + 16, ay + 10),
+                     (ax + 8, ay + 16), (ax - 8, ay + 16)],
+                    surfer.rgb(52, 34, 26))
+            volcanoes.append((bx, bw, mh, ax - bx))
+        else:
+            cap = mh // 4
+            mt.poly([(ax - int(bw * 0.13), ay + cap), (ax, ay),
+                     (ax + int(bw * 0.13), ay + cap),
+                     (ax + int(bw * 0.05), ay + cap - 8),
+                     (ax - int(bw * 0.06), ay + cap - 4)],
+                    ((ax, ay, surfer.rgb(244, 246, 250)),
+                     (ax, ay + cap, surfer.rgb(198, 206, 224))))
+    return mt, volcanoes
 
 
-def build_ground():
-    g = surfer.image_new(SW, GND_H)
-    top = img("2d/New Platformer Pack/Sprites/Tiles/terrain_grass_block_top.png")
-    fill = img("2d/New Platformer Pack/Sprites/Tiles/terrain_grass_block.png")
-    for x in range(0, SW, 64):
-        g.blit(top, x, 0)
-        g.blit(fill, x, 64)
-    top.destroy()
-    fill.destroy()
-    decor = ["grass", "bush", "mushroom_red", "fence", "rock", "grass",
-             "mushroom_brown", "sign", "grass_purple", "fence_broken"]
-    for i, name in enumerate(decor):
-        d = img("2d/New Platformer Pack/Sprites/Tiles/%s.png" % name)
-        g.blit(d, 40 + i * 200, -d.h + 66)
-        d.destroy()
-    return g
+def build_lava(bw, mh, axl):
+    """One volcano's lava: bezier veins + crater glow in an A8 mask.
+    Coverage fades toward the foot (gradient-alpha paint); the color is
+    the mask's .tint, cycled per frame by the caller. The mask is
+    cropped to the vein column — these sprites ride a scrolling layer,
+    so they re-blend every frame and their bbox is the price."""
+    x0 = axl - int(bw * 0.07) - 14
+    mw = int(bw * 0.15) + 28
+    mhh = int(mh * 0.85) + 4
+    ax = axl - x0
+    m = surfer.image_new(mw, mhh, surfer.A8)
+    fade = ((ax, 6, 0xffff, 255), (ax, mh * 0.85, 0xffff, 0))
+    m.bezier([(ax - 2, 8), (ax - 14, mh * 0.3), (ax - 2, mh * 0.5),
+              (ax - int(bw * 0.07), mh * 0.82)], fade, 5)
+    m.bezier([(ax + 2, 10), (ax + 16, mh * 0.33), (ax + 5, mh * 0.5),
+              (ax + int(bw * 0.08), mh * 0.74)], fade, 3.5)
+    m.bezier([(ax - 3, 12), (ax - 8, mh * 0.28), (ax - 15, mh * 0.44)],
+             fade, 2.5)
+    m.ellipse(ax, 8, 9, 4, (0xffff, 255))         # the crater pool
+    return m, x0
 
 
 def main():
@@ -101,7 +138,9 @@ def main():
     scene = surfer.group(0, 0)
     root.add(scene)
 
-    strips = [build_sky(), build_mountains(), build_ground()]
+    sky = build_sky()
+    mt, volcanoes = build_mountains()
+    strips = [sky, mt, build_ground()]
     ys = [0, SKY_H, SKY_H + MT_H]
     speeds = [0.6, 3.0, 6.0]          # 0.1x / 0.5x / 1x
     layers = []
@@ -111,6 +150,15 @@ def main():
         scene.add(l)
         layers.append(l)
     offs = [0.0, 0.0, 0.0]
+
+    # lava overlays ride the mountain layer (later siblings => the layer
+    # damages them as it shifts; we retint + damage as they glow)
+    lavas = []
+    for k, (bx, bw, mh, axl) in enumerate(volcanoes):
+        mask, ox = build_lava(bw, mh, axl)
+        s = surfer.sprite(mask, -bw, SKY_H + MT_H - mh)
+        scene.add(s)
+        lavas.append((s, mask, bx + ox, mask.w, k * 2.1))
 
     ship_img = img("2d/Space Shooter Remastered/playerShip1_blue.png")
     ship = surfer.sprite(ship_img, 180, 0)
@@ -126,6 +174,20 @@ def main():
         for i, l in enumerate(layers):
             offs[i] = (offs[i] + speeds[i]) % SW
             l.set_offset(offs[i])
+
+        for s, mask, bx, bw, phase in lavas:
+            sx = (bx - offs[1]) % SW
+            if sx >= SW - bw:
+                sx -= SW            # wrapping in from the left edge
+            if sx <= -bw or sx >= W:
+                s.hidden = True     # off-screen: no blend, no damage
+                continue
+            s.hidden = False
+            s.x_pos = int(sx)
+            glow = 0.5 + 0.5 * math.sin(f * 0.11 + phase)
+            mask.tint = surfer.rgb(255, int(60 + 165 * glow), int(34 * glow))
+            s.damage()
+
         ship.y_pos = base_y + int(26 * math.sin(f / 19.0)) + int(8 * math.sin(f / 5.3))
 
         state["n"] += 1
@@ -156,6 +218,24 @@ def main():
         if shot and state["frames"] == 75:
             surfer.screenshot(shot)
             return
+
+
+def build_ground():
+    g = surfer.image_new(SW, GND_H)
+    top = img("2d/New Platformer Pack/Sprites/Tiles/terrain_grass_block_top.png")
+    fill = img("2d/New Platformer Pack/Sprites/Tiles/terrain_grass_block.png")
+    for x in range(0, SW, 64):
+        g.blit(top, x, 0)
+        g.blit(fill, x, 64)
+    top.destroy()
+    fill.destroy()
+    decor = ["grass", "bush", "mushroom_red", "fence", "rock", "grass",
+             "mushroom_brown", "sign", "grass_purple", "fence_broken"]
+    for i, name in enumerate(decor):
+        d = img("2d/New Platformer Pack/Sprites/Tiles/%s.png" % name)
+        g.blit(d, 40 + i * 200, -d.h + 66)
+        d.destroy()
+    return g
 
 
 main()

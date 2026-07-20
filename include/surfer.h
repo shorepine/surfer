@@ -60,6 +60,29 @@ void surf_image_blit(surf_image *dst, const surf_image *src, surf_rect src_r,
 void surf_image_blit_rot(surf_image *dst, const surf_image *src,
                          surf_rect src_r, int16_t x, int16_t y, uint8_t rot);
 
+/* Load-time vector shapes (src/core/shape.c): anti-aliased fills and
+ * round-capped strokes baked into an image — the frame path never sees
+ * a curve. Coords are Q16 pixels. Drawing into an SURF_FMT_A8 image
+ * puts coverage in alpha: the whole drawing recolors by .tint (cycling
+ * shapes for the price of a blend). Never call these per frame. */
+enum { SURF_PAINT_SOLID = 0, SURF_PAINT_LINEAR = 1 };
+typedef struct {
+    uint8_t    kind;            /* SURF_PAINT_* */
+    surf_color c0, c1;          /* endpoint colors (solid uses c0/a0) */
+    uint8_t    a0, a1;          /* endpoint alphas */
+    int32_t    x0, y0, x1, y1;  /* gradient axis, Q16 dst coords */
+} surf_paint;
+void surf_image_poly(surf_image *dst, const int32_t *xy_q16, int n,
+                     const surf_paint *paint);          /* filled, nonzero */
+void surf_image_polyline(surf_image *dst, const int32_t *xy_q16, int n,
+                         int32_t width_q16, const surf_paint *paint);
+void surf_image_ellipse(surf_image *dst, int32_t cx_q16, int32_t cy_q16,
+                        int32_t rx_q16, int32_t ry_q16,
+                        int32_t width_q16 /* 0 = fill */,
+                        const surf_paint *paint);
+void surf_image_bezier(surf_image *dst, const int32_t xy_q16[8],
+                       int32_t width_q16, const surf_paint *paint);  /* cubic */
+
 typedef enum {
     SURF_TOUCH_DOWN = 0,
     SURF_TOUCH_MOVE = 1,

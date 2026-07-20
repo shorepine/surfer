@@ -188,6 +188,33 @@ the frame path pays one blit per layer instead of one per tile:
 ```python
 strip = surfer.image_new(2048, 128)          # opaque; alpha=True for ARGB
 strip.fill(surfer.rgb(92, 148, 218))         # also: fill(c, x, y, w, h)
+### Shapes — draw the asset, then sprite it
+
+All shape calls rasterize INTO an image at load time (anti-aliased,
+never per frame). Paints are an rgb565 int, `(color, alpha)`, or a
+linear gradient `((x0, y0, c0[, a0]), (x1, y1, c1[, a1]))` between two
+stops. `surfer.image_new(w, h, surfer.A8)` makes a tintable mask —
+shapes drawn there recolor by `.tint` (see color cycling above).
+
+```python
+g = surfer.image_new(512, 300)                       # opaque 565 canvas
+g.poly([(0,300), (256,20), (512,300)],               # gradient triangle
+       ((0,300, surfer.rgb(78,54,38)), (256,20, surfer.rgb(172,124,74))))
+g.line(10, 10, 500, 40, color, 3)                    # width 3, round caps
+g.lines([(0,0), (40,80), (90,20)], color, 5)         # polyline, round joins
+g.circle(60, 60, 25, color)                          # filled
+g.circle(60, 60, 25, color, 4)                       # 4px outline
+g.ellipse(cx, cy, rx, ry, color[, width])
+g.bezier([(0,90), (50,0), (100,90)], color, 4)       # 3 pts quadratic
+g.bezier([p0, c0, c1, p1], color, 4)                 # 4 pts cubic
+```
+
+`import parallax` shows the combination: every mountain is gradient
+polys (no art), and the volcanoes' lava veins are bezier strokes in A8
+masks with cycling tints. Keep tint-cycled overlay masks CROPPED to
+their ink when they ride a fast-scrolling layer — a moving overlay
+re-blends its whole bbox every frame (DESIGN.md §5).
+
 tile = surfer.image(open("grass.png", "rb").read())
 for x in range(0, 2048, 64):
     strip.blit(tile, x, 0)                   # load-time composition (CPU)

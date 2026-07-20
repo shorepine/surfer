@@ -113,10 +113,9 @@ void surf_image_destroy(surf_image *img)
 
 surf_image *surf_image_new(int16_t w, int16_t h, surf_format format)
 {
-    if (!surf_g.hal || w <= 0 || h <= 0 ||
-        (format != SURF_FMT_RGB565 && format != SURF_FMT_ARGB8888))
+    if (!surf_g.hal || w <= 0 || h <= 0 || format > SURF_FMT_A8)
         return NULL;
-    int bpp = format == SURF_FMT_ARGB8888 ? 4 : 2;
+    int bpp = format == SURF_FMT_ARGB8888 ? 4 : format == SURF_FMT_A8 ? 1 : 2;
     int32_t stride = ((int32_t)w * bpp + 63) & ~63;
     uint8_t *px = surf_g.hal->alloc_image((size_t)stride * h);
     surf_image *img = malloc(sizeof *img);
@@ -130,6 +129,7 @@ surf_image *surf_image_new(int16_t w, int16_t h, surf_format format)
         .pixels = px, .w = w, .h = h, .stride = stride,
         .format = (uint8_t)format,
         .opaque = format == SURF_FMT_RGB565,
+        .tint = 0xffff,   /* A8 masks start white */
     };
     return img;
 }
@@ -258,6 +258,9 @@ void surf_image_blit(surf_image *dst, const surf_image *src, surf_rect sr,
                 uint32_t ng = (g * a + dg * (255 - a) + 127) / 255;
                 uint32_t nb = (b * a + db * (255 - a) + 127) / 255;
                 *d = (uint16_t)(((nr & 0xf8) << 8) | ((ng & 0xfc) << 3) | (nb >> 3));
+            } else if (dst->format == SURF_FMT_A8) {  /* coverage-over */
+                uint8_t *d = (uint8_t *)dst->pixels + (y + j) * dst->stride + x + i;
+                *d = (uint8_t)(a + *d * (255 - a) / 255);
             } else {  /* ARGB dst: src-over */
                 uint32_t *d = (uint32_t *)((uint8_t *)dst->pixels +
                                            (y + j) * dst->stride) + x + i;

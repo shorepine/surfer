@@ -14,6 +14,7 @@ target_sources(usermod_surfer INTERFACE
     ${SURFER_DIR}/src/core/rect.c
     ${SURFER_DIR}/src/core/node.c
     ${SURFER_DIR}/src/core/image.c
+    ${SURFER_DIR}/src/core/shape.c
     ${SURFER_DIR}/src/core/compose.c
     ${SURFER_DIR}/src/core/hit.c
     ${SURFER_DIR}/src/core/input.c
