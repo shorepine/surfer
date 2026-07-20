@@ -201,17 +201,16 @@ def main():
             return True
         return False
 
+    # tap (or hold) anywhere: the elf walks toward that spot
+    target = [None]
+
     def on_touch(phase, x, y):
-        nonlocal ex, ey
-        wx = x + campos[0] - EW // 2
-        if wx > ex:
-            state["facing"] = 1
-        elif wx < ex:
-            state["facing"] = -1
-        if not blocked(wx + 12, ey + EH - 20, EW - 24, 18):
-            ex = wx
-    elf_a.on_touch = on_touch
-    elf_b.on_touch = on_touch
+        if phase == surfer.TOUCH_UP:
+            return
+        target[0] = (x + campos[0] - EW // 2,
+                     y + campos[1] - EH + 10)
+    # on the scene group: every child (camera, critters, elf) routes here
+    scene.on_touch = on_touch
 
     import builtins
     auto = getattr(builtins, "FOREST_AUTOWALK", False)
@@ -230,6 +229,16 @@ def main():
                 moved = try_move(0, -14) or moved
             elif kind == surfer.KEY_DOWN:
                 moved = try_move(0, 14) or moved
+        if target[0] is not None:
+            tx, ty = target[0]
+            dx = 0 if abs(tx - ex) < 6 else (6 if tx > ex else -6)
+            dy = 0 if abs(ty - ey) < 6 else (6 if ty > ey else -6)
+            if dx == 0 and dy == 0:
+                target[0] = None
+            elif try_move(dx, dy):
+                moved = True
+            else:
+                target[0] = None  # blocked both ways: give up
         if auto:
             if not try_move(auto_dir[0], auto_dir[1]) or rnd(90) == 0:
                 auto_dir[0], auto_dir[1] = (

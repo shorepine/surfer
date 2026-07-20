@@ -269,6 +269,11 @@ void surfer_port_fb_sync_for_read(void)
     surf_hal_p4_fb_invalidate();
 }
 
+bool surfer_port_has_touch(void)
+{
+    return P.touch != NULL;
+}
+
 void surfer_port_prepare_image(surf_image *img)
 {
     /* flash .rodata → PSRAM: the PPA cannot DMA from memory-mapped flash */

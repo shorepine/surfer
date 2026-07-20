@@ -40,3 +40,8 @@ void surfer_port_fb_sync_for_read(void)
 {
     /* software fb: always CPU-coherent */
 }
+
+bool surfer_port_has_touch(void)
+{
+    return true;  /* the mouse */
+}

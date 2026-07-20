@@ -679,6 +679,13 @@ static mp_obj_t mod_fb_read(size_t n_args, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_fb_read_obj, 4, 4, mod_fb_read);
 
+/* surfer.has_touch() — did the touch controller come up? */
+static mp_obj_t mod_has_touch(void)
+{
+    return mp_obj_new_bool(surfer_port_has_touch());
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mod_has_touch_obj, mod_has_touch);
+
 static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
 {
     int16_t w = n_args > 0 ? (int16_t)mp_obj_get_int(args[0]) : 1024;
@@ -1006,6 +1013,7 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_image_new), MP_ROM_PTR(&mod_image_new_obj)},
     {MP_ROM_QSTR(MP_QSTR_layer), MP_ROM_PTR(&mod_layer_obj)},
     {MP_ROM_QSTR(MP_QSTR_fb_read), MP_ROM_PTR(&mod_fb_read_obj)},
+    {MP_ROM_QSTR(MP_QSTR_has_touch), MP_ROM_PTR(&mod_has_touch_obj)},
     {MP_ROM_QSTR(MP_QSTR_sprite), MP_ROM_PTR(&mod_sprite_obj)},
     {MP_ROM_QSTR(MP_QSTR_label), MP_ROM_PTR(&mod_label_obj)},
     {MP_ROM_QSTR(MP_QSTR_textgrid), MP_ROM_PTR(&mod_textgrid_obj)},
