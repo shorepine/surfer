@@ -34,6 +34,13 @@ typedef struct {
     surf_color tint;    /* A8 only: the color the alpha modulates */
 } surf_image;
 
+/* Runtime images (sprites loaded after boot, any size). Pixels come from
+ * hal->alloc_image, so surf_init must have run. PNG decodes to ARGB8888
+ * (opaque flag set when the file has no transparency). Destroy only
+ * after every node using the image is gone. */
+surf_image *surf_image_from_png(const void *data, size_t len);
+void        surf_image_destroy(surf_image *img);
+
 typedef enum {
     SURF_TOUCH_DOWN = 0,
     SURF_TOUCH_MOVE = 1,
@@ -47,7 +54,12 @@ typedef struct {
     void (*fill)(surf_rect dst, surf_color c);
     void (*blit)(const surf_image *src, surf_rect src_r, surf_point dst);
     void (*blend)(const surf_image *src, surf_rect src_r, surf_point dst, uint8_t opa);
-    void (*scale_blit)(const surf_image *src, surf_rect src_r, surf_rect dst_r);
+    /* Draw src_r scaled into dst_r, rotated by `rot` quarter turns CCW
+     * (matching the P4 PPA's SRM engine), alpha-blended unless the image
+     * is opaque; only the `vis` sub-rect of dst_r must be written. dst_r
+     * is the post-rotation footprint. */
+    void (*xform_blend)(const surf_image *src, surf_rect src_r, surf_rect dst_r,
+                        surf_rect vis, uint8_t rot);
     void (*present)(const surf_rect *dirty, int n);
     void (*wait_idle)(void);
     uint64_t (*now_us)(void);
@@ -125,6 +137,12 @@ void surf_node_set_hidden(surf_node *n, bool hidden);
 void surf_rect_set_color(surf_node *n, surf_color c);
 void surf_rect_set_size(surf_node *n, int16_t w, int16_t h);
 void surf_sprite_set_src(surf_node *n, surf_rect src);
+/* Uniform scale (Q16; SURF_ONE = 1:1, PPA range ~1/16..16) and rotation
+ * in quarter turns CCW (0..3 — the P4's SRM engine only does 90° steps).
+ * The node's w/h become the transformed footprint. */
+void    surf_sprite_set_xform(surf_node *n, int32_t scale_q16, uint8_t rot);
+int32_t surf_sprite_scale(const surf_node *n);
+uint8_t surf_sprite_rot(const surf_node *n);
 void surf_group_set_clip(surf_node *g, int16_t w, int16_t h);  /* 0×0 disables */
 void surf_filmstrip_set_frame(surf_node *n, int16_t frame);
 int16_t surf_filmstrip_frame(const surf_node *n);

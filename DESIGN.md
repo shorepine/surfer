@@ -248,6 +248,12 @@ its own task, only `present`/PPA waits move, not callbacks.)
 4. **Does `scale_blit` make v1?** PPA does scaling/rotation nearly free; SDL
    too. Tempting for zoom transitions, but cut from v1 frame path to keep the
    compositor simple — the hal op exists, nothing uses it yet.
+   DECIDED at M7 (sprites): the op became `xform_blend(src, src_r, dst_r,
+   vis, rot)` — scale via the dst/src ratio, rotation in quarter turns CCW
+   (the PPA SRM limit), alpha-aware. p4 runs it as SRM-to-scratch + blend
+   (the SRM engine can't blend and the blend engine can't scale); sdl is a
+   nearest-neighbor inverse-mapping loop. Only transformed sprites use it;
+   the 1:1 compositor path is unchanged.
 5. **License.** DECIDED: MIT (stb is public domain/MIT), chosen at first
    public push.
 

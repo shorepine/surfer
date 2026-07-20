@@ -93,7 +93,13 @@ typedef struct {
     mp_obj_base_t base;
     surf_node *node;
     mp_obj_t touch_cb;  /* node.on_touch: fn(phase, x, y) or None */
+    mp_obj_t img_ref;   /* sprites: keeps the Image object alive */
 } surfer_node_obj_t;
+
+typedef struct {
+    mp_obj_base_t base;
+    surf_image *img;    /* NULL after destroy() */
+} surfer_image_obj_t;
 
 enum { W_SLIDER, W_KNOB, W_CHECKBOX, W_DROPDOWN, W_BUTTON };
 
@@ -126,6 +132,7 @@ static surfer_node_obj_t *new_node_obj(surf_node *n)
     surfer_node_obj_t *o = mp_obj_malloc(surfer_node_obj_t, &surfer_node_type);
     o->node = n;
     o->touch_cb = mp_const_none;
+    o->img_ref = mp_const_none;
     registry_add(MP_OBJ_FROM_PTR(o));
     return o;
 }
@@ -339,6 +346,34 @@ static void node_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
         dest[0] = MP_OBJ_NULL;
         return;
     }
+    /* sprite transform: scale (float, 1.0 = 1:1) and rot (degrees CCW,
+     * quarter turns only — the P4 PPA's limit) */
+    if (dest[0] == MP_OBJ_NULL && attr == MP_QSTR_scale) {
+        dest[0] = mp_obj_new_float((mp_float_t)surf_sprite_scale(o->node) /
+                                   (mp_float_t)SURF_ONE);
+        return;
+    }
+    if (dest[0] == MP_OBJ_NULL && attr == MP_QSTR_rot) {
+        dest[0] = MP_OBJ_NEW_SMALL_INT(surf_sprite_rot(o->node) * 90);
+        return;
+    }
+    if (dest[0] != MP_OBJ_NULL && attr == MP_QSTR_scale) {
+        surf_sprite_set_xform(o->node,
+                              (int32_t)(mp_obj_get_float(dest[1]) * SURF_ONE),
+                              surf_sprite_rot(o->node));
+        dest[0] = MP_OBJ_NULL;
+        return;
+    }
+    if (dest[0] != MP_OBJ_NULL && attr == MP_QSTR_rot) {
+        mp_int_t deg = mp_obj_get_int(dest[1]);
+        deg = ((deg % 360) + 360) % 360;
+        if (deg % 90)
+            mp_raise_ValueError(MP_ERROR_TEXT("rot must be a multiple of 90"));
+        surf_sprite_set_xform(o->node, surf_sprite_scale(o->node),
+                              (uint8_t)(deg / 90));
+        dest[0] = MP_OBJ_NULL;
+        return;
+    }
     surf_point p = surf_node_pos(o->node);
     surf_point s = surf_node_size(o->node);
     node_pos_attr(o->node, attr, dest, p.x, p.y, s.x, s.y);
@@ -346,6 +381,44 @@ static void node_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
 
 MP_DEFINE_CONST_OBJ_TYPE(surfer_node_type, MP_QSTR_Node, MP_TYPE_FLAG_NONE,
                          attr, node_attr, locals_dict, &node_locals_dict);
+
+/* ---- Image (runtime PNG) ---- */
+
+static mp_obj_t image_destroy(mp_obj_t self_in)
+{
+    surfer_image_obj_t *o = MP_OBJ_TO_PTR(self_in);
+    if (o->img) {
+        surf_image_destroy(o->img);
+        o->img = NULL;
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(image_destroy_obj, image_destroy);
+
+static const mp_rom_map_elem_t image_locals_table[] = {
+    {MP_ROM_QSTR(MP_QSTR_destroy), MP_ROM_PTR(&image_destroy_obj)},
+};
+static MP_DEFINE_CONST_DICT(image_locals_dict, image_locals_table);
+
+static void image_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
+{
+    surfer_image_obj_t *o = MP_OBJ_TO_PTR(self_in);
+    if (dest[0] == MP_OBJ_NULL && o->img) {
+        if (attr == MP_QSTR_w) {
+            dest[0] = MP_OBJ_NEW_SMALL_INT(o->img->w);
+            return;
+        }
+        if (attr == MP_QSTR_h) {
+            dest[0] = MP_OBJ_NEW_SMALL_INT(o->img->h);
+            return;
+        }
+    }
+    if (dest[0] == MP_OBJ_NULL)
+        dest[1] = MP_OBJ_SENTINEL;
+}
+
+MP_DEFINE_CONST_OBJ_TYPE(surfer_image_type, MP_QSTR_Image, MP_TYPE_FLAG_NONE,
+                         attr, image_attr, locals_dict, &image_locals_dict);
 
 /* ---- Widget ---- */
 
@@ -550,6 +623,36 @@ static mp_obj_t mod_group(mp_obj_t x, mp_obj_t y)
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(mod_group_obj, mod_group);
 
+/* surfer.image(png_bytes) -> Image. Read the file in Python — bytes work
+ * the same on unix, the P4's VFS, and web MEMFS/frozen assets. */
+static mp_obj_t mod_image(mp_obj_t data_in)
+{
+    mp_buffer_info_t buf;
+    mp_get_buffer_raise(data_in, &buf, MP_BUFFER_READ);
+    surf_image *img = surf_image_from_png(buf.buf, buf.len);
+    if (!img)
+        mp_raise_ValueError(MP_ERROR_TEXT("png decode failed"));
+    surfer_image_obj_t *o = mp_obj_malloc(surfer_image_obj_t, &surfer_image_type);
+    o->img = img;
+    return MP_OBJ_FROM_PTR(o);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(mod_image_obj, mod_image);
+
+/* surfer.sprite(image, x, y) -> Node with .scale / .rot */
+static mp_obj_t mod_sprite(mp_obj_t img_in, mp_obj_t x_in, mp_obj_t y_in)
+{
+    if (!mp_obj_is_type(img_in, &surfer_image_type))
+        mp_raise_TypeError(MP_ERROR_TEXT("expected surfer Image"));
+    surfer_image_obj_t *io = MP_OBJ_TO_PTR(img_in);
+    if (!io->img)
+        mp_raise_ValueError(MP_ERROR_TEXT("image destroyed"));
+    surfer_node_obj_t *o = new_node_obj(surf_sprite_new(
+        io->img, (int16_t)mp_obj_get_int(x_in), (int16_t)mp_obj_get_int(y_in)));
+    o->img_ref = img_in;
+    return MP_OBJ_FROM_PTR(o);
+}
+static MP_DEFINE_CONST_FUN_OBJ_3(mod_sprite_obj, mod_sprite);
+
 static mp_obj_t mod_rect(size_t n_args, const mp_obj_t *args)
 {
     surf_color c = n_args > 4 ? (surf_color)mp_obj_get_int(args[4])
@@ -733,6 +836,8 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_rgb), MP_ROM_PTR(&mod_rgb_obj)},
     {MP_ROM_QSTR(MP_QSTR_group), MP_ROM_PTR(&mod_group_obj)},
     {MP_ROM_QSTR(MP_QSTR_rect), MP_ROM_PTR(&mod_rect_obj)},
+    {MP_ROM_QSTR(MP_QSTR_image), MP_ROM_PTR(&mod_image_obj)},
+    {MP_ROM_QSTR(MP_QSTR_sprite), MP_ROM_PTR(&mod_sprite_obj)},
     {MP_ROM_QSTR(MP_QSTR_label), MP_ROM_PTR(&mod_label_obj)},
     {MP_ROM_QSTR(MP_QSTR_textgrid), MP_ROM_PTR(&mod_textgrid_obj)},
     {MP_ROM_QSTR(MP_QSTR_scrollview), MP_ROM_PTR(&mod_scrollview_obj)},

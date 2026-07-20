@@ -2,7 +2,7 @@
 
 CC      ?= cc
 CFLAGS  ?= -O2 -g
-CFLAGS  += -std=c11 -Wall -Wextra -Iinclude
+CFLAGS  += -std=c11 -Wall -Wextra -Iinclude -Itools
 
 CORE_SRCS   := $(wildcard src/core/*.c) $(wildcard src/text/*.c)
 WIDGET_SRCS := $(wildcard src/widgets/*.c)
@@ -118,7 +118,7 @@ gen: $(GEN_DIR)/widget_assets.h $(GEN_DIR)/font_ui16.h $(GEN_DIR)/font_ui28.h \
 
 EMCC ?= emcc
 WEB_DIR := build/web
-WEB_CFLAGS := -O2 -std=gnu11 -Wall -Wextra -Iinclude -Isrc/core -Isrc/hal/sdl \
+WEB_CFLAGS := -O2 -std=gnu11 -Wall -Wextra -Iinclude -Itools -Isrc/core -Isrc/hal/sdl \
 	-I$(GEN_DIR) -sUSE_SDL=2
 WEB_LDFLAGS := -sASYNCIFY -sALLOW_MEMORY_GROWTH
 

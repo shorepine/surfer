@@ -25,9 +25,11 @@ static void m_blend(const surf_image *src, surf_rect sr, surf_point dst, uint8_t
     (void)opa;
     ops[nops++] = (mock_op){.op = 'A', .img = src, .src = sr, .dst = dst};
 }
-static void m_scale_blit(const surf_image *s, surf_rect a, surf_rect b)
+static void m_xform_blend(const surf_image *s, surf_rect sr, surf_rect dst_r,
+                          surf_rect vis, uint8_t rot)
 {
-    (void)s; (void)a; (void)b;
+    ops[nops++] = (mock_op){.op = 'X', .img = s, .src = sr, .r = dst_r,
+                            .vis = vis, .rot = rot};
 }
 static void m_present(const surf_rect *dirty, int n)
 {
@@ -71,7 +73,7 @@ static void m_scroll_rect(surf_rect r, int16_t dy)
 }
 
 const surf_hal mock_hal = {
-    m_fill, m_blit, m_blend, m_scale_blit, m_present,
+    m_fill, m_blit, m_blend, m_xform_blend, m_present,
     m_wait_idle, m_now_us, m_poll_touch, m_alloc_image, m_free_image,
     m_fb_ptr, m_scroll_rect,
 };

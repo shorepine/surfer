@@ -178,10 +178,83 @@ static void h_blend(const surf_image *src, surf_rect sr, surf_point dst, uint8_t
     ppa_do_blend(S.blend_cl, &op);
 }
 
-static void h_scale_blit(const surf_image *src, surf_rect src_r, surf_rect dst_r)
+/* Transformed sprites: the PPA's SRM engine scales/rotates but cannot
+ * blend, and the blend engine cannot scale — so SRM the whole sprite
+ * into a scratch buffer, then blend the visible sub-rect over the fb.
+ * Two PPA ops ≈ 200–400µs per sprite per damaged frame. Scratch grows
+ * lazily and is PPA-to-PPA only (no CPU access → no cache sync). */
+static struct {
+    void  *buf;
+    size_t bytes;
+} S_xform;
+
+static void *h_alloc_image(size_t bytes);
+static void h_free_image(void *p);
+
+static void h_xform_blend(const surf_image *src, surf_rect sr, surf_rect dst_r,
+                          surf_rect vis, uint8_t rot)
 {
-    /* In the vtable per DESIGN.md §5.4; unused by the v1 frame path. */
-    (void)src; (void)src_r; (void)dst_r;
+    int bpp = bytespp(src);
+    int32_t stride = ((int32_t)dst_r.w * bpp + P4_ALIGN - 1) & ~(P4_ALIGN - 1);
+    size_t need = (size_t)stride * dst_r.h;
+    if (need > S_xform.bytes) {
+        if (S_xform.buf)
+            h_free_image(S_xform.buf);
+        S_xform.buf = h_alloc_image(need);
+        S_xform.bytes = S_xform.buf ? need : 0;
+        if (!S_xform.buf)
+            return;
+    }
+
+    /* footprint before rotation — SRM wants pre-rotation scale factors */
+    int32_t w0 = (rot & 1) ? dst_r.h : dst_r.w;
+    int32_t h0 = (rot & 1) ? dst_r.w : dst_r.h;
+    ppa_srm_oper_config_t srm = {
+        .in = {
+            .buffer = src->pixels,
+            .pic_w = (uint32_t)(src->stride / bpp),
+            .pic_h = (uint32_t)src->h,
+            .block_w = (uint32_t)sr.w,
+            .block_h = (uint32_t)sr.h,
+            .block_offset_x = (uint32_t)sr.x,
+            .block_offset_y = (uint32_t)sr.y,
+            .srm_cm = srm_cm(src),
+        },
+        .out = {
+            .buffer = S_xform.buf,
+            .buffer_size = S_xform.bytes,
+            .pic_w = (uint32_t)(stride / bpp),
+            .pic_h = (uint32_t)dst_r.h,
+            .block_offset_x = 0,
+            .block_offset_y = 0,
+            .srm_cm = srm_cm(src),
+        },
+        .rotation_angle = (ppa_srm_rotation_angle_t)rot,
+        .scale_x = (float)w0 / (float)sr.w,
+        .scale_y = (float)h0 / (float)sr.h,
+        .mode = PPA_TRANS_MODE_BLOCKING,
+    };
+    ppa_do_scale_rotate_mirror(S.srm_cl, &srm);
+
+    surf_image scratch = {
+        .pixels = S_xform.buf,
+        .w = dst_r.w,
+        .h = dst_r.h,
+        .stride = stride,
+        .format = src->format,
+        .opaque = src->opaque,
+        .tint = src->tint,
+    };
+    if (src->opaque)
+        h_blit(&scratch,
+               (surf_rect){(int16_t)(vis.x - dst_r.x), (int16_t)(vis.y - dst_r.y),
+                           vis.w, vis.h},
+               (surf_point){vis.x, vis.y});
+    else
+        h_blend(&scratch,
+                (surf_rect){(int16_t)(vis.x - dst_r.x), (int16_t)(vis.y - dst_r.y),
+                            vis.w, vis.h},
+                (surf_point){vis.x, vis.y}, 255);
 }
 
 static bool fbcpy_done(esp_async_fbcpy_handle_t mcp, esp_async_fbcpy_event_data_t *ev,
@@ -530,7 +603,7 @@ static const surf_hal hal_p4 = {
     .fill = h_fill,
     .blit = h_blit,
     .blend = h_blend,
-    .scale_blit = h_scale_blit,
+    .xform_blend = h_xform_blend,
     .present = h_present,
     .wait_idle = h_wait_idle,
     .now_us = h_now_us,

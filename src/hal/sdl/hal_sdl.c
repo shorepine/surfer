@@ -150,10 +150,48 @@ static void h_blend(const surf_image *src, surf_rect sr, surf_point dst, uint8_t
     }
 }
 
-static void h_scale_blit(const surf_image *src, surf_rect src_r, surf_rect dst_r)
+static void h_xform_blend(const surf_image *src, surf_rect sr, surf_rect dst_r,
+                          surf_rect vis, uint8_t rot)
 {
-    /* Exists in the vtable per DESIGN.md §5.4; nothing uses it in v1. */
-    (void)src; (void)src_r; (void)dst_r;
+    /* nearest-neighbor inverse mapping; rot = quarter turns CCW to
+     * match the P4 PPA's SRM engine. dst_r is the post-rotation
+     * footprint; W0/H0 is the footprint before rotation. */
+    int32_t W0 = (rot & 1) ? dst_r.h : dst_r.w;
+    int32_t H0 = (rot & 1) ? dst_r.w : dst_r.h;
+    if (W0 <= 0 || H0 <= 0)
+        return;
+    for (int y = 0; y < vis.h; y++) {
+        int32_t dy = vis.y + y - dst_r.y;
+        uint16_t *drow = S.fb + (vis.y + y) * S.w;
+        for (int x = 0; x < vis.w; x++) {
+            int32_t dx = vis.x + x - dst_r.x;
+            int32_t ux, uy;
+            switch (rot) {
+            default: ux = dx;                    uy = dy;                    break;
+            case 1:  ux = dst_r.h - 1 - dy;      uy = dx;                    break;
+            case 2:  ux = dst_r.w - 1 - dx;      uy = dst_r.h - 1 - dy;      break;
+            case 3:  ux = dy;                    uy = dst_r.w - 1 - dx;      break;
+            }
+            int32_t sx = sr.x + (int32_t)((int64_t)ux * sr.w / W0);
+            int32_t sy = sr.y + (int32_t)((int64_t)uy * sr.h / H0);
+            uint16_t *d = drow + vis.x + x;
+            if (src->format == SURF_FMT_ARGB8888) {
+                uint32_t p = *(const uint32_t *)((const uint8_t *)src->pixels +
+                                                 sy * src->stride + sx * 4);
+                *d = blend_px(*d, p, p >> 24);
+            } else if (src->format == SURF_FMT_RGB565) {
+                *d = *(const uint16_t *)((const uint8_t *)src->pixels +
+                                         sy * src->stride + sx * 2);
+            } else {  /* A8: alpha from image, color from tint */
+                surf_color t = src->tint;
+                uint32_t rgb = ((uint32_t)((t >> 8) & 0xf8) << 16) |
+                               ((uint32_t)((t >> 3) & 0xfc) << 8) |
+                               (uint32_t)((t << 3) & 0xf8);
+                uint8_t a = *((const uint8_t *)src->pixels + sy * src->stride + sx);
+                *d = blend_px(*d, rgb, a);
+            }
+        }
+    }
 }
 
 static void h_present(const surf_rect *dirty, int n)
@@ -250,7 +288,7 @@ static const surf_hal hal_sdl = {
     .fill = h_fill,
     .blit = h_blit,
     .blend = h_blend,
-    .scale_blit = h_scale_blit,
+    .xform_blend = h_xform_blend,
     .present = h_present,
     .wait_idle = h_wait_idle,
     .now_us = h_now_us,

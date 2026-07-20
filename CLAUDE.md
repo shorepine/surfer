@@ -153,6 +153,23 @@ ASYNCIFY), and hal_sdl compiled as a direct usermod TU with
 SURF_HAL_SDL_NO_YIELD (emscripten drops EM_JS bodies that come from
 static archives — links fine, JS function silently missing).
 
+M7 sprites: runtime images + transformed sprites, all three backends.
+`surf_image_from_png` (stb_image, vendored in tools/stb/, PNG-only,
+decode at load time — never in the frame path) → ARGB8888 with the
+64-byte stride rule; any size. Sprites gained `surf_sprite_set_xform`:
+uniform scale (Q16, clamped to the PPA's 1/16..16) and rotation in
+quarter turns CCW (the PPA SRM limit). Transformed draws go through the
+new hal op `xform_blend` (see DESIGN.md §5.4-decided); moving a sprite
+is just node damage — the compositor repaints what it uncovers. MP API:
+`surfer.image(png_bytes)` → Image (w/h, destroy(); sprites hold a ref
+so the GC can't free pixels in use), `surfer.sprite(img, x, y)` with
+`.scale` (float) and `.rot` (degrees, multiples of 90). Demo:
+`import space` in tulip mode (examples/space.py + space_assets.py —
+Kenney CC0 art baked to bytes by tools/pngwrap.py; source PNGs in
+assets/kenney/). Frozen into web + SURFER_P4. Verified: unix shot,
+web (anim delta + frame dump), P4 runs it without PPA errors
+(on-panel eyeball pending).
+
 Tulip mode for the P4 is VERIFIED ON HARDWARE — REPL on the panel,
 USB keyboard typing, touch live (MICROPY_HW_ENABLE_USBDEV=0 in the
 board config is what frees the OTG PHY for host mode). Build: `make mpy-p4` — micropython v1.28.0 (`~/micropython-1.28`,

@@ -47,7 +47,12 @@ struct surf_node {
     void      *touch_user;
     union {
         struct { surf_color color; } rect;
-        struct { const surf_image *img; surf_rect src; } sprite;
+        struct {
+            const surf_image *img;
+            surf_rect src;
+            int32_t scale_q16;   /* SURF_ONE = 1:1 */
+            uint8_t rot;         /* quarter turns CCW, 0..3 */
+        } sprite;
         struct {
             const surf_image *img;
             int16_t fw, fh;      /* frame size; node w/h mirror these */

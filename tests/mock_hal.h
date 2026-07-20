@@ -7,12 +7,14 @@
 #include "surf_internal.h"
 
 typedef struct {
-    char       op;  /* 'F' fill, 'B' blit, 'A' blend, 'P' present */
-    surf_rect  r;
+    char       op;  /* 'F' fill, 'B' blit, 'A' blend, 'X' xform, 'P' present */
+    surf_rect  r;   /* fill rect; xform: the dst footprint */
     surf_color c;
     const surf_image *img;
     surf_rect  src;
     surf_point dst;
+    surf_rect  vis; /* xform only */
+    uint8_t    rot; /* xform only */
     int        nrects;
 } mock_op;
 

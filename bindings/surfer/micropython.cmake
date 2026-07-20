@@ -13,6 +13,7 @@ target_sources(usermod_surfer INTERFACE
     ${SURFER_MOD_DIR}/usb_kbd.c
     ${SURFER_DIR}/src/core/rect.c
     ${SURFER_DIR}/src/core/node.c
+    ${SURFER_DIR}/src/core/image.c
     ${SURFER_DIR}/src/core/compose.c
     ${SURFER_DIR}/src/core/hit.c
     ${SURFER_DIR}/src/core/input.c
@@ -35,6 +36,7 @@ target_include_directories(usermod_surfer INTERFACE
     ${SURFER_DIR}/src/core
     ${SURFER_DIR}/src/hal/p4
     ${SURFER_DIR}/build/gen
+    ${SURFER_DIR}/tools
     # esp_async_fbcpy (DMA2D rect copy) ships in esp_lcd's priv_include
     $ENV{IDF_PATH}/components/esp_lcd/priv_include
 )

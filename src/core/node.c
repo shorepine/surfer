@@ -167,8 +167,25 @@ surf_node *surf_sprite_new(const surf_image *img, int16_t x, int16_t y)
         n->x = x; n->y = y; n->w = img->w; n->h = img->h;
         n->u.sprite.img = img;
         n->u.sprite.src = (surf_rect){0, 0, img->w, img->h};
+        n->u.sprite.scale_q16 = SURF_ONE;
+        n->u.sprite.rot = 0;
     }
     return n;
+}
+
+/* node w/h = the on-screen footprint: src scaled, sides swapped for
+ * quarter-turn rotations */
+static void sprite_update_size(surf_node *n)
+{
+    int32_t w = (int32_t)(((int64_t)n->u.sprite.src.w * n->u.sprite.scale_q16) >> 16);
+    int32_t h = (int32_t)(((int64_t)n->u.sprite.src.h * n->u.sprite.scale_q16) >> 16);
+    if (w < 1) w = 1;
+    if (h < 1) h = 1;
+    if (n->u.sprite.rot & 1) {
+        int32_t t = w; w = h; h = t;
+    }
+    n->w = (int16_t)w;
+    n->h = (int16_t)h;
 }
 
 surf_node *surf_filmstrip_new(const surf_image *img, int16_t frame_w, int16_t frame_h,
@@ -303,9 +320,35 @@ void surf_sprite_set_src(surf_node *n, surf_rect src)
         return;
     surf_damage_subtree(n);
     n->u.sprite.src = src;
-    n->w = src.w;
-    n->h = src.h;
+    sprite_update_size(n);
     surf_damage_subtree(n);
+}
+
+void surf_sprite_set_xform(surf_node *n, int32_t scale_q16, uint8_t rot)
+{
+    if (!n || n->type != SURF_NODE_SPRITE || scale_q16 <= 0)
+        return;
+    /* the PPA SRM range; keep every backend honest about it */
+    if (scale_q16 < SURF_ONE / 16) scale_q16 = SURF_ONE / 16;
+    if (scale_q16 > SURF_ONE * 16) scale_q16 = SURF_ONE * 16;
+    rot &= 3;
+    if (scale_q16 == n->u.sprite.scale_q16 && rot == n->u.sprite.rot)
+        return;
+    surf_damage_subtree(n);
+    n->u.sprite.scale_q16 = scale_q16;
+    n->u.sprite.rot = rot;
+    sprite_update_size(n);
+    surf_damage_subtree(n);
+}
+
+int32_t surf_sprite_scale(const surf_node *n)
+{
+    return (n && n->type == SURF_NODE_SPRITE) ? n->u.sprite.scale_q16 : SURF_ONE;
+}
+
+uint8_t surf_sprite_rot(const surf_node *n)
+{
+    return (n && n->type == SURF_NODE_SPRITE) ? n->u.sprite.rot : 0;
 }
 
 void surf_group_set_clip(surf_node *g, int16_t w, int16_t h)
