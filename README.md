@@ -182,7 +182,7 @@ idf.py -p <port> flash monitor
 - [x] M7 — sprites: runtime PNG loading from Python, any size, alpha,
       scale + quarter-turn rotation (PPA SRM on device)
 - [ ] M8 — real art pass, default theme
-- [ ] later — sprite sub-rects/mirroring, on-screen keyboard widget,
+- [ ] later — sprite sub-rect animation, on-screen keyboard widget,
       audio hooks (AMY), app switcher (the tulip5 OS layer)
 
 ## License

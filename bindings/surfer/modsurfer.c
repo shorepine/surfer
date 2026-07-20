@@ -346,8 +346,9 @@ static void node_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
         dest[0] = MP_OBJ_NULL;
         return;
     }
-    /* sprite transform: scale (float, 1.0 = 1:1) and rot (degrees CCW,
-     * quarter turns only — the P4 PPA's limit) */
+    /* sprite transform: scale (float, 1.0 = 1:1), rot (degrees CCW,
+     * quarter turns only — the P4 PPA's limit), mirror_x / mirror_y
+     * (bools; source flip before rotation) */
     if (dest[0] == MP_OBJ_NULL && attr == MP_QSTR_scale) {
         dest[0] = mp_obj_new_float((mp_float_t)surf_sprite_scale(o->node) /
                                    (mp_float_t)SURF_ONE);
@@ -357,10 +358,19 @@ static void node_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
         dest[0] = MP_OBJ_NEW_SMALL_INT(surf_sprite_rot(o->node) * 90);
         return;
     }
+    if (dest[0] == MP_OBJ_NULL && attr == MP_QSTR_mirror_x) {
+        dest[0] = mp_obj_new_bool(surf_sprite_mirror(o->node) & 1);
+        return;
+    }
+    if (dest[0] == MP_OBJ_NULL && attr == MP_QSTR_mirror_y) {
+        dest[0] = mp_obj_new_bool(surf_sprite_mirror(o->node) & 2);
+        return;
+    }
     if (dest[0] != MP_OBJ_NULL && attr == MP_QSTR_scale) {
         surf_sprite_set_xform(o->node,
                               (int32_t)(mp_obj_get_float(dest[1]) * SURF_ONE),
-                              surf_sprite_rot(o->node));
+                              surf_sprite_rot(o->node),
+                              surf_sprite_mirror(o->node));
         dest[0] = MP_OBJ_NULL;
         return;
     }
@@ -370,7 +380,18 @@ static void node_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
         if (deg % 90)
             mp_raise_ValueError(MP_ERROR_TEXT("rot must be a multiple of 90"));
         surf_sprite_set_xform(o->node, surf_sprite_scale(o->node),
-                              (uint8_t)(deg / 90));
+                              (uint8_t)(deg / 90),
+                              surf_sprite_mirror(o->node));
+        dest[0] = MP_OBJ_NULL;
+        return;
+    }
+    if (dest[0] != MP_OBJ_NULL &&
+        (attr == MP_QSTR_mirror_x || attr == MP_QSTR_mirror_y)) {
+        uint8_t bit = attr == MP_QSTR_mirror_x ? 1 : 2;
+        uint8_t m = surf_sprite_mirror(o->node);
+        m = mp_obj_is_true(dest[1]) ? (m | bit) : (m & ~bit);
+        surf_sprite_set_xform(o->node, surf_sprite_scale(o->node),
+                              surf_sprite_rot(o->node), m);
         dest[0] = MP_OBJ_NULL;
         return;
     }

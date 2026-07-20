@@ -131,6 +131,8 @@ s.x_pos = 300         # move it: the compositor repaints whatever it uncovers �
 s.scale = 1.5         # uniform scale, 1/16 .. 16 (float; the PPA SRM range)
 s.rot = 90            # rotation in degrees CCW — multiples of 90 only
                       # (the ESP32-P4's SRM engine rotates in quarter turns)
+s.mirror_x = True     # flip horizontally (walk left with right-facing art);
+s.mirror_y = True     # flips apply to the source before rotation
 s.w, s.h              # the transformed on-screen footprint
 ```
 
@@ -145,8 +147,8 @@ scale/rotate op (PPA SRM + blend on device, ~200–400 µs per sprite per
 damaged frame — dozens per frame are fine).
 
 Sprites keep a reference to their `Image`, so the GC won't collect
-pixels that are still on screen. Sprite-sheet sub-rects and mirroring
-aren't exposed yet.
+pixels that are still on screen. Sprite-sheet sub-rect animation
+isn’t exposed yet.
 
 The full demo is [examples/space.py](../bindings/surfer/examples/space.py)
 (`import space` from tulip mode): draggable ship, tumbling meteors at

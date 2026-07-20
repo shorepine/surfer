@@ -29,9 +29,9 @@ void run_sprite_tests(void)
     OK(sawA && !sawX);
 
     /* footprint: scale 2x doubles, quarter turn swaps sides */
-    surf_sprite_set_xform(s, SURF_ONE * 2, 0);
+    surf_sprite_set_xform(s, SURF_ONE * 2, 0, 0);
     OK(surf_node_size(s).x == 128 && surf_node_size(s).y == 128);
-    surf_sprite_set_xform(s, SURF_ONE / 2, 1);
+    surf_sprite_set_xform(s, SURF_ONE / 2, 1, 0);
     OK(surf_node_size(s).x == 32 && surf_node_size(s).y == 32);
     surf_sprite_set_src(s, (surf_rect){0, 0, 64, 32});
     OK(surf_node_size(s).x == 16 && surf_node_size(s).y == 32);  /* rot 1: swapped */
@@ -57,7 +57,7 @@ void run_sprite_tests(void)
     /* an xform write redraws the new footprint (old is inside it here) */
     surf_tick();
     nops = 0;
-    surf_sprite_set_xform(s, SURF_ONE * 2, 0);   /* -> 128x64 at 20,20 */
+    surf_sprite_set_xform(s, SURF_ONE * 2, 0, 0);   /* -> 128x64 at 20,20 */
     surf_tick();
     bool covered_new = false;
     for (int i = 0; i < nops; i++)
@@ -66,8 +66,22 @@ void run_sprite_tests(void)
     OK(covered_new);
 
     /* clamping: absurd scales stay in the PPA's range */
-    surf_sprite_set_xform(s, SURF_ONE * 100, 0);
+    surf_sprite_set_xform(s, SURF_ONE * 100, 0, 0);
     OK(surf_sprite_scale(s) == SURF_ONE * 16);
+
+    /* mirror alone takes the xform path, footprint unchanged */
+    surf_sprite_set_xform(s, SURF_ONE, 0, 1);
+    OK(surf_sprite_mirror(s) == 1);
+    OK(surf_node_size(s).x == 64 && surf_node_size(s).y == 32);
+    surf_tick();
+    nops = 0;
+    surf_node_set_pos(s, 24, 24);
+    surf_tick();
+    bool saw_mirror = false;
+    for (int i = 0; i < nops; i++)
+        if (ops[i].op == 'X' && ops[i].mirror == 1 && ops[i].rot == 0)
+            saw_mirror = true;
+    OK(saw_mirror);
 
     surf_node_destroy(s);
 }

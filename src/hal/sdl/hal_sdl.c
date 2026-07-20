@@ -151,11 +151,12 @@ static void h_blend(const surf_image *src, surf_rect sr, surf_point dst, uint8_t
 }
 
 static void h_xform_blend(const surf_image *src, surf_rect sr, surf_rect dst_r,
-                          surf_rect vis, uint8_t rot)
+                          surf_rect vis, uint8_t rot, uint8_t mirror)
 {
-    /* nearest-neighbor inverse mapping; rot = quarter turns CCW to
-     * match the P4 PPA's SRM engine. dst_r is the post-rotation
-     * footprint; W0/H0 is the footprint before rotation. */
+    /* nearest-neighbor inverse mapping; rot = quarter turns CCW and
+     * mirror flips the source before rotation, matching the P4 PPA's
+     * SRM engine. dst_r is the post-rotation footprint; W0/H0 is the
+     * footprint before rotation. */
     int32_t W0 = (rot & 1) ? dst_r.h : dst_r.w;
     int32_t H0 = (rot & 1) ? dst_r.w : dst_r.h;
     if (W0 <= 0 || H0 <= 0)
@@ -172,6 +173,10 @@ static void h_xform_blend(const surf_image *src, surf_rect sr, surf_rect dst_r,
             case 2:  ux = dst_r.w - 1 - dx;      uy = dst_r.h - 1 - dy;      break;
             case 3:  ux = dy;                    uy = dst_r.w - 1 - dx;      break;
             }
+            if (mirror & 1)
+                ux = W0 - 1 - ux;
+            if (mirror & 2)
+                uy = H0 - 1 - uy;
             int32_t sx = sr.x + (int32_t)((int64_t)ux * sr.w / W0);
             int32_t sy = sr.y + (int32_t)((int64_t)uy * sr.h / H0);
             uint16_t *d = drow + vis.x + x;

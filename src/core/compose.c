@@ -113,13 +113,15 @@ static void paint(const surf_paint_ent *e)
         surf_g.hal->fill(e->vis, n->u.rect.color);
         return;
     case SURF_NODE_SPRITE:
-        if (n->u.sprite.scale_q16 != SURF_ONE || n->u.sprite.rot != 0) {
+        if (n->u.sprite.scale_q16 != SURF_ONE || n->u.sprite.rot != 0 ||
+            n->u.sprite.mirror != 0) {
             /* transformed: the hal draws from the full source into the
              * full footprint, clipped to vis (partial-src arithmetic
-             * doesn't survive scaling and rotation) */
+             * doesn't survive scaling, rotation or mirroring) */
             surf_g.hal->xform_blend(n->u.sprite.img, n->u.sprite.src,
                                     (surf_rect){e->ax, e->ay, n->w, n->h},
-                                    e->vis, n->u.sprite.rot);
+                                    e->vis, n->u.sprite.rot,
+                                    n->u.sprite.mirror);
             return;
         }
         image_op(n->u.sprite.img, (surf_rect){

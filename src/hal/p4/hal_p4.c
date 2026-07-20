@@ -192,7 +192,7 @@ static void *h_alloc_image(size_t bytes);
 static void h_free_image(void *p);
 
 static void h_xform_blend(const surf_image *src, surf_rect sr, surf_rect dst_r,
-                          surf_rect vis, uint8_t rot)
+                          surf_rect vis, uint8_t rot, uint8_t mirror)
 {
     int bpp = bytespp(src);
     int32_t stride = ((int32_t)dst_r.w * bpp + P4_ALIGN - 1) & ~(P4_ALIGN - 1);
@@ -232,6 +232,8 @@ static void h_xform_blend(const surf_image *src, surf_rect sr, surf_rect dst_r,
         .rotation_angle = (ppa_srm_rotation_angle_t)rot,
         .scale_x = (float)w0 / (float)sr.w,
         .scale_y = (float)h0 / (float)sr.h,
+        .mirror_x = (mirror & 1) != 0,
+        .mirror_y = (mirror & 2) != 0,
         .mode = PPA_TRANS_MODE_BLOCKING,
     };
     ppa_do_scale_rotate_mirror(S.srm_cl, &srm);

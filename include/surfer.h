@@ -54,12 +54,13 @@ typedef struct {
     void (*fill)(surf_rect dst, surf_color c);
     void (*blit)(const surf_image *src, surf_rect src_r, surf_point dst);
     void (*blend)(const surf_image *src, surf_rect src_r, surf_point dst, uint8_t opa);
-    /* Draw src_r scaled into dst_r, rotated by `rot` quarter turns CCW
-     * (matching the P4 PPA's SRM engine), alpha-blended unless the image
-     * is opaque; only the `vis` sub-rect of dst_r must be written. dst_r
-     * is the post-rotation footprint. */
+    /* Draw src_r scaled into dst_r, mirrored (bit0 = x, bit1 = y, applied
+     * to the source before rotation) and rotated by `rot` quarter turns
+     * CCW (matching the P4 PPA's SRM engine), alpha-blended unless the
+     * image is opaque; only the `vis` sub-rect of dst_r must be written.
+     * dst_r is the post-rotation footprint. */
     void (*xform_blend)(const surf_image *src, surf_rect src_r, surf_rect dst_r,
-                        surf_rect vis, uint8_t rot);
+                        surf_rect vis, uint8_t rot, uint8_t mirror);
     void (*present)(const surf_rect *dirty, int n);
     void (*wait_idle)(void);
     uint64_t (*now_us)(void);
@@ -137,12 +138,15 @@ void surf_node_set_hidden(surf_node *n, bool hidden);
 void surf_rect_set_color(surf_node *n, surf_color c);
 void surf_rect_set_size(surf_node *n, int16_t w, int16_t h);
 void surf_sprite_set_src(surf_node *n, surf_rect src);
-/* Uniform scale (Q16; SURF_ONE = 1:1, PPA range ~1/16..16) and rotation
- * in quarter turns CCW (0..3 — the P4's SRM engine only does 90° steps).
- * The node's w/h become the transformed footprint. */
-void    surf_sprite_set_xform(surf_node *n, int32_t scale_q16, uint8_t rot);
+/* Uniform scale (Q16; SURF_ONE = 1:1, PPA range ~1/16..16), rotation in
+ * quarter turns CCW (0..3 — the P4's SRM engine only does 90° steps),
+ * and mirror (bit0 = x flip, bit1 = y flip; applied to the source before
+ * rotation). The node's w/h become the transformed footprint. */
+void    surf_sprite_set_xform(surf_node *n, int32_t scale_q16, uint8_t rot,
+                              uint8_t mirror);
 int32_t surf_sprite_scale(const surf_node *n);
 uint8_t surf_sprite_rot(const surf_node *n);
+uint8_t surf_sprite_mirror(const surf_node *n);
 void surf_group_set_clip(surf_node *g, int16_t w, int16_t h);  /* 0×0 disables */
 void surf_filmstrip_set_frame(surf_node *n, int16_t frame);
 int16_t surf_filmstrip_frame(const surf_node *n);

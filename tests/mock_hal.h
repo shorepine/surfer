@@ -13,8 +13,9 @@ typedef struct {
     const surf_image *img;
     surf_rect  src;
     surf_point dst;
-    surf_rect  vis; /* xform only */
-    uint8_t    rot; /* xform only */
+    surf_rect  vis;    /* xform only */
+    uint8_t    rot;    /* xform only */
+    uint8_t    mirror; /* xform only */
     int        nrects;
 } mock_op;
 

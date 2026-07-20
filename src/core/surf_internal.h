@@ -52,6 +52,7 @@ struct surf_node {
             surf_rect src;
             int32_t scale_q16;   /* SURF_ONE = 1:1 */
             uint8_t rot;         /* quarter turns CCW, 0..3 */
+            uint8_t mirror;      /* bit0 = x flip, bit1 = y flip */
         } sprite;
         struct {
             const surf_image *img;

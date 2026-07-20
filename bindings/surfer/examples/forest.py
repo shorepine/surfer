@@ -151,12 +151,13 @@ def main():
     world.add(elf_b)
     EW, EH = elf_a.w, elf_a.h
 
-    state = {"frames": 0, "step": 0, "moving": 0}
+    state = {"frames": 0, "step": 0, "moving": 0, "facing": 1}
 
     def place_elf():
         for e in (elf_a, elf_b):
             e.x_pos = ex
             e.y_pos = ey
+            e.mirror_x = state["facing"] < 0  # art faces right
         show_b = state["moving"] > 0 and (state["step"] // 4) % 2 == 1
         elf_a.hidden = show_b
         elf_b.hidden = not show_b
@@ -177,8 +178,10 @@ def main():
             dx = dy = 0
             if kind == surfer.KEY_LEFT:
                 dx = -14
+                state["facing"] = -1
             elif kind == surfer.KEY_RIGHT:
                 dx = 14
+                state["facing"] = 1
             elif kind == surfer.KEY_UP:
                 dy = -14
             elif kind == surfer.KEY_DOWN:
