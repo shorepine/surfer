@@ -45,3 +45,9 @@ bool surfer_port_has_touch(void)
 {
     return true;  /* the mouse */
 }
+
+bool surfer_port_touch_info(int *x_max, int *y_max)
+{
+    *x_max = *y_max = 0;
+    return false;
+}

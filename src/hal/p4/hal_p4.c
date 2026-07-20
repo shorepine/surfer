@@ -358,8 +358,15 @@ static void h_present(const surf_rect *dirty, int n)
         S.scrolled = false;
         return;
     }
-    esp_lcd_panel_draw_bitmap(S.cfg.panel, 0, miny, S.cfg.w, maxy,
+    /* Full region, always: draw_bitmap with a partial y-range msyncs the
+     * WRONG rows for the flip (it treats the pointer as the region's
+     * top-left, we pass the fb base), and streaming bands change rows
+     * the dirty list deliberately doesn't cover — the vertical-pan
+     * "screen doesn't scroll" bug. Writeback of clean lines is cheap;
+     * PPA/DMA2D content isn't cached at all. */
+    esp_lcd_panel_draw_bitmap(S.cfg.panel, 0, 0, S.cfg.w, S.cfg.h,
                               S.cfg.scan_fbs[S.back]);
+    (void)miny; (void)maxy;
     S.last_flip = (uint8_t)S.back;
 
     uint8_t live = S.live;  /* snapshot: the ISR may update it under us */

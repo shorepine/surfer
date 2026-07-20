@@ -193,10 +193,11 @@ def main():
         if not blocked(nx + 12, ny + EH - 20, EW - 24, 18):
             ex, ey = nx, ny
             return True
-        if dx and not blocked(ex + 12, ny + EH - 20, EW - 24, 18):
+        # slide on whichever single axis is free (each must actually move)
+        if dy and not blocked(ex + 12, ny + EH - 20, EW - 24, 18):
             ey = ny
             return True
-        if dy and not blocked(nx + 12, ey + EH - 20, EW - 24, 18):
+        if dx and not blocked(nx + 12, ey + EH - 20, EW - 24, 18):
             ex = nx
             return True
         return False
@@ -270,8 +271,16 @@ def main():
                 node.y_pos = c["y"] - campos[1]
                 node.hidden = (which == "b") != walk_b
 
-        state["n"] += 1
+        # fixed 60 Hz pacing: critter/walk speeds must not track frame
+        # rate (idle frames are much cheaper than walking frames)
         now = time.ticks_ms()
+        spent = time.ticks_diff(now, state.get("last", now))
+        if 0 <= spent < 16:
+            time.sleep_ms(16 - spent)
+            now = time.ticks_ms()
+        state["last"] = now
+
+        state["n"] += 1
         dt = time.ticks_diff(now, state["t0"])
         if dt >= 2000:
             print("forest: %.1f fps (%.2f ms/frame)" %

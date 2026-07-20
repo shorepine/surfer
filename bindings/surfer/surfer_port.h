@@ -40,6 +40,7 @@ bool surfer_port_screenshot(const char *path);
 void surfer_port_fb_sync_for_read(void);
 /* Did a touch device come up? (GT911 probe on p4; SDL mouse counts.) */
 bool surfer_port_has_touch(void);
+bool surfer_port_touch_info(int *x_max, int *y_max);
 /* Make an image DMA-readable in place (flash .rodata → PSRAM on device;
  * no-op on desktop). Call once per image before first use. */
 void surfer_port_prepare_image(surf_image *img);

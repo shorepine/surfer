@@ -686,6 +686,17 @@ static mp_obj_t mod_has_touch(void)
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mod_has_touch_obj, mod_has_touch);
 
+/* surfer._touch_info() — controller's configured (x_max, y_max), or None */
+static mp_obj_t mod_touch_info(void)
+{
+    int xm, ym;
+    if (!surfer_port_touch_info(&xm, &ym))
+        return mp_const_none;
+    mp_obj_t t[2] = {MP_OBJ_NEW_SMALL_INT(xm), MP_OBJ_NEW_SMALL_INT(ym)};
+    return mp_obj_new_tuple(2, t);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mod_touch_info_obj, mod_touch_info);
+
 static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
 {
     int16_t w = n_args > 0 ? (int16_t)mp_obj_get_int(args[0]) : 1024;
@@ -1014,6 +1025,7 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_layer), MP_ROM_PTR(&mod_layer_obj)},
     {MP_ROM_QSTR(MP_QSTR_fb_read), MP_ROM_PTR(&mod_fb_read_obj)},
     {MP_ROM_QSTR(MP_QSTR_has_touch), MP_ROM_PTR(&mod_has_touch_obj)},
+    {MP_ROM_QSTR(MP_QSTR__touch_info), MP_ROM_PTR(&mod_touch_info_obj)},
     {MP_ROM_QSTR(MP_QSTR_sprite), MP_ROM_PTR(&mod_sprite_obj)},
     {MP_ROM_QSTR(MP_QSTR_label), MP_ROM_PTR(&mod_label_obj)},
     {MP_ROM_QSTR(MP_QSTR_textgrid), MP_ROM_PTR(&mod_textgrid_obj)},

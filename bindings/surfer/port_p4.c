@@ -274,6 +274,19 @@ bool surfer_port_has_touch(void)
     return P.touch != NULL;
 }
 
+/* diagnostic: the GT911's configured output range (regs 0x8048..0x804B) */
+bool surfer_port_touch_info(int *x_max, int *y_max)
+{
+    if (!P.touch)
+        return false;
+    uint8_t v[4];
+    if (gt911_read(0x8048, v, 4) != ESP_OK)
+        return false;
+    *x_max = v[0] | (v[1] << 8);
+    *y_max = v[2] | (v[3] << 8);
+    return true;
+}
+
 void surfer_port_prepare_image(surf_image *img)
 {
     /* flash .rodata → PSRAM: the PPA cannot DMA from memory-mapped flash */
