@@ -61,13 +61,14 @@ static void test_dirty_coalesce(void)
     OK(d.n == 1);
 
     /* overflow degrades to one bounding union, never drops damage */
-    surf_dirty_reset(&d, (surf_rect){0, 0, 400, 400});
+    surf_dirty_reset(&d, (surf_rect){0, 0, 700, 700});
     for (int i = 0; i < SURF_MAX_DIRTY; i++)
         surf_dirty_add(&d, (surf_rect){(int16_t)(i * 20), (int16_t)(i * 20), 5, 5});
     OK(d.n == SURF_MAX_DIRTY);
-    surf_dirty_add(&d, (surf_rect){390, 0, 5, 5});
+    surf_dirty_add(&d, (surf_rect){690, 0, 5, 5});
     OK(d.n == 1);
-    OK(rect_eq(d.r[0], (surf_rect){0, 0, 395, 305}));
+    OK(rect_eq(d.r[0], (surf_rect){0, 0, 695,
+                                   (int16_t)((SURF_MAX_DIRTY - 1) * 20 + 5)}));
 }
 
 static void test_damage_on_writes(void)
@@ -80,11 +81,21 @@ static void test_damage_on_writes(void)
     OK(rect_eq(surf_g.dirty.r[0], (surf_rect){10, 10, 20, 20}));
     surf_tick();
 
-    /* move: old and new rects both damaged (disjoint → two entries) */
+    /* far move: old and new rects both damaged (two entries) */
     surf_node_set_pos(r, 100, 50);
     OK(surf_g.dirty.n == 2);
     OK(rect_eq(surf_g.dirty.r[0], (surf_rect){10, 10, 20, 20}));
     OK(rect_eq(surf_g.dirty.r[1], (surf_rect){100, 50, 20, 20}));
+    surf_tick();
+
+    /* small move: ONE union entry — per-frame movers must not burn two
+     * dirty slots each (a screen of bullets used to overflow the list
+     * into the full-screen fallback) */
+    surf_node_set_pos(r, 118, 50);
+    OK(surf_g.dirty.n == 1);
+    OK(rect_eq(surf_g.dirty.r[0], (surf_rect){100, 50, 38, 20}));
+    surf_tick();
+    surf_node_set_pos(r, 100, 50);
     surf_tick();
 
     /* group offset applies to child damage */

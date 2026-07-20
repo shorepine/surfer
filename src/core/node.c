@@ -118,14 +118,14 @@ surf_rect surf_node_subtree_bounds(const surf_node *n, int16_t px, int16_t py)
  * minus its scroll offset when it's a scrollview — and clipping to any
  * clipped box on the way. Damage from deep inside a scrolled list lands on
  * exactly the visible pixels it affects, or nowhere. */
-void surf_damage_subtree(const surf_node *n)
+static surf_rect subtree_screen_rect(const surf_node *n)
 {
     if (!surf_g.root || !surf_node_attached(n))
-        return;
+        return (surf_rect){0, 0, 0, 0};
     surf_rect b = surf_node_subtree_bounds(n, 0, 0);
     for (const surf_node *p = n->parent; p; p = p->parent) {
         if (surf_rect_empty(b))
-            return;
+            return b;
         if (p->type == SURF_NODE_SCROLLVIEW) {
             b.x = (int16_t)(b.x - (p->u.scroll.off_x >> 16));
             b.y = (int16_t)(b.y - (p->u.scroll.off_y >> 16));
@@ -136,7 +136,14 @@ void surf_damage_subtree(const surf_node *n)
         b.x = (int16_t)(b.x + p->x);
         b.y = (int16_t)(b.y + p->y);
     }
-    surf_dirty_add(&surf_g.dirty, b);
+    return b;
+}
+
+void surf_damage_subtree(const surf_node *n)
+{
+    surf_rect b = subtree_screen_rect(n);
+    if (!surf_rect_empty(b))
+        surf_dirty_add(&surf_g.dirty, b);
 }
 
 /* ---- constructors ---- */
@@ -282,10 +289,28 @@ void surf_node_set_pos(surf_node *n, int16_t x, int16_t y)
 {
     if (!n || (n->x == x && n->y == y))
         return;
-    surf_damage_subtree(n);
+    /* A small move damages ONE union rect, not old + new: adjacent
+     * rects never coalesce (dirty merge needs overlap), so per-frame
+     * movers used to cost two entries each — six bullets and a ship
+     * overflowed the 16-entry list and degraded to a full-screen
+     * union (measured: 50 -> 11 fps). Union only when it wastes
+     * little area; a teleport still damages two separate rects. */
+    surf_rect a = subtree_screen_rect(n);
     n->x = x;
     n->y = y;
-    surf_damage_subtree(n);
+    surf_rect b = subtree_screen_rect(n);
+    surf_rect u = surf_rect_union(a, b);
+    int32_t ua = (int32_t)u.w * u.h;
+    int32_t sa = (int32_t)a.w * a.h + (int32_t)b.w * b.h;
+    if (ua <= sa + sa / 4) {
+        if (!surf_rect_empty(u))
+            surf_dirty_add(&surf_g.dirty, u);
+    } else {
+        if (!surf_rect_empty(a))
+            surf_dirty_add(&surf_g.dirty, a);
+        if (!surf_rect_empty(b))
+            surf_dirty_add(&surf_g.dirty, b);
+    }
 }
 
 void surf_node_set_hidden(surf_node *n, bool hidden)

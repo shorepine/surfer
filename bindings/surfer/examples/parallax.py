@@ -202,6 +202,11 @@ def main():
     except ImportError:
         auto_held = None
 
+    # on-screen fps meter (top-left, over the slow sky band; a static
+    # overlay on a fast band costs its small bbox per frame)
+    meter = surfer.label("-- fps", 12, 8, surfer.rgb(255, 255, 160))
+    scene.add(meter)
+
     state = {"frames": 0, "t0": time.ticks_ms(), "n": 0}
 
     def _step():
@@ -289,8 +294,9 @@ def main():
         now = time.ticks_ms()
         dt = time.ticks_diff(now, state["t0"])
         if dt >= 1000:
-            print("parallax: %.1f fps (%.2f ms/frame)" %
-                  (state["n"] * 1000.0 / dt, dt / state["n"]))
+            fps = state["n"] * 1000.0 / dt
+            print("parallax: %.1f fps (%.2f ms/frame)" % (fps, dt / state["n"]))
+            meter.set_text("%d fps" % int(fps + 0.5))
             state["t0"] = now
             state["n"] = 0
         return True

@@ -4,7 +4,10 @@
 
 #include "surfer.h"
 
-#define SURF_MAX_DIRTY 16
+/* 32: a screenful of independent movers (bullets, critters, overlays on
+ * fast bands) plus slivers and smears must fit without degrading to the
+ * bounding-union fallback — that fallback repaints the world (§5) */
+#define SURF_MAX_DIRTY 32
 
 enum {
     SURF_NODE_FREE = 0,

@@ -312,6 +312,18 @@ its own task, only `present`/PPA waits move, not callbacks.)
    Single-buffer has no pristine source for the copy, so band_shift is
    triple-only (layers fall back to full repaint there).
 
+   **The dirty list is a budget — movers cost one entry, not two.**
+   surf_node_set_pos damages the UNION of old+new when the move wastes
+   little area (per-frame movers slide a few px; the two rects are
+   adjacent, and adjacent rects never coalesce — the merge rule needs
+   overlap). Before this, six bullets + a ship + slivers + smears
+   overflowed the 16-entry list every frame and the overflow fallback
+   (degrade to one bounding union) repainted the whole world: measured
+   50 -> 11 fps on the P4 the moment the parallax ship held its fire
+   button. Now 32 entries, union moves, 33-43 fps under max fire. If a
+   scene ever legitimately needs more independent movers than that,
+   raise SURF_MAX_DIRTY before doing anything clever.
+
    **Overlay sprites on a fast band are the expensive thing**: they
    re-blend every frame (the band moves under them), so their cost is
    their bounding box, not their ink. Measured with the procedural-lava
