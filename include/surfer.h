@@ -170,6 +170,27 @@ void       surf_tick(void);  /* compose dirty rects + present */
 void       surf_set_frame_divisor(int divisor);
 float      surf_frame_hz(void);  /* panel refresh rate (60 if unknown) */
 
+/* ---- input feed (src/core/keys.c) ----------------------------------
+ * Abstract input from any source. A DRIVER (USB HID, SDL keyboard, i2c
+ * gamepad, ...) converts its hardware into these calls; surfer core
+ * queues/stores them and the MicroPython module exposes them. No
+ * hardware knowledge lives in surfer — a driver says "key A pressed" or
+ * (via surf_pad_*) "button 2 down, axis 1 = -0.2", not "USB endpoint
+ * 0x81 reported...". */
+typedef enum {
+    SURFER_KEY_TEXT = 0,   /* utf8[] holds the typed text */
+    SURFER_KEY_LEFT, SURFER_KEY_RIGHT, SURFER_KEY_UP, SURFER_KEY_DOWN,
+    SURFER_KEY_PGUP, SURFER_KEY_PGDN, SURFER_KEY_HOME, SURFER_KEY_END,
+    SURFER_KEY_BACKSPACE, SURFER_KEY_DELETE, SURFER_KEY_ENTER,
+} surfer_key_kind;
+typedef struct { uint8_t kind; bool shift; char utf8[8]; } surfer_key;
+
+void surf_key_event(const surfer_key *k);   /* push a discrete key (typing/repeat) */
+void surf_key_set_held(const surfer_key *keys, int n);  /* replace the held set */
+bool surf_key_poll(surfer_key *out);        /* drain one queued event (module) */
+int  surf_key_held(surfer_key *out, int max);  /* current held set (module) */
+void surf_key_reset(void);                  /* clear queue + held */
+
 /* ---- controllers (src/core/pad.c) ----------------------------------
  * A normalized game pad: an 8-way dpad/hat, face + shoulder buttons,
  * and two analog sticks. SOURCES write it (USB gamepad, i2c stick,

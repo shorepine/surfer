@@ -177,25 +177,8 @@ mpy: build/libsurfer.a gen
 MPY_P4_DIR ?= $(HOME)/micropython-1.28
 IDF_EXPORT ?= $(HOME)/esp/esp-idf-v5.5.1/export.sh
 
-mpy-p4: gen
-	cp bindings/surfer/boards/SURFER_P4/partitions-surfer-16MiB.csv \
-		$(MPY_P4_DIR)/ports/esp32/
-	bash -c "source $(IDF_EXPORT) >/dev/null 2>&1 && \
-		$(MAKE) -C $(MPY_P4_DIR)/ports/esp32 \
-		BOARD=SURFER_P4 \
-		BOARD_DIR=$(abspath bindings/surfer/boards/SURFER_P4) \
-		USER_C_MODULES=$(abspath bindings/surfer/micropython.cmake)"
-	@echo "→ $(MPY_P4_DIR)/ports/esp32/build-SURFER_P4/  (make mpy-p4-flash PORT=...)"
 
-mpy-p4-flash:
-	bash -c "source $(IDF_EXPORT) >/dev/null 2>&1 && \
-		$(MAKE) -C $(MPY_P4_DIR)/ports/esp32 \
-		BOARD=SURFER_P4 \
-		BOARD_DIR=$(abspath bindings/surfer/boards/SURFER_P4) \
-		USER_C_MODULES=$(abspath bindings/surfer/micropython.cmake) \
-		PORT=$(PORT) deploy"
-
-.PHONY: gen mpy mpy-p4 mpy-p4-flash
+.PHONY: gen mpy
 
 clean:
 	rm -rf build

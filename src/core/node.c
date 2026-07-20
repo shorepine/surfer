@@ -60,6 +60,7 @@ bool surf_init(const surf_hal *hal, int16_t w, int16_t h, const surf_config *cfg
 
     surf_g.root = node_alloc(SURF_NODE_GROUP);
     surf_pad_reset_all();
+    surf_key_reset();
     surf_dirty_reset(&surf_g.dirty, (surf_rect){0, 0, w, h});
     surf_dirty_add(&surf_g.dirty, (surf_rect){0, 0, w, h});
     return true;

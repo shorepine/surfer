@@ -14,39 +14,28 @@ const surf_hal *surfer_port_init(int16_t w, int16_t h, bool single_buffer)
     return surf_hal_sdl_init(w, h, "surfer");
 }
 
+/* The desktop's "input driver": each pump, drain SDL key events and
+ * snapshot held keys into surfer's abstract feed API (surf_key_*). This
+ * is the same contract a device USB driver uses — surfer never sees
+ * SDL. */
 bool surfer_port_pump(void)
 {
-    return surf_hal_sdl_pump();
-}
-
-bool surfer_port_poll_key(surfer_key *out)
-{
-    surf_sdl_key k;  /* kinds are defined to match */
-    if (!surf_hal_sdl_poll_key(&k))
-        return false;
-    out->kind = k.kind;
-    out->shift = k.shift;
-    memcpy(out->utf8, k.utf8, sizeof out->utf8);
-    return true;
-}
-
-bool surfer_port_gamepad_active(void)
-{
-    return false;   /* desktop has no USB gamepad path yet */
-}
-
-int surfer_port_keys_held(surfer_key *out, int max)
-{
-    surf_sdl_key k[8];
-    if (max > 8)
-        max = 8;
-    int n = surf_hal_sdl_keys_held(k, max);
-    for (int i = 0; i < n; i++) {
-        out[i].kind = k[i].kind;
-        out[i].shift = k[i].shift;
-        memcpy(out[i].utf8, k[i].utf8, sizeof out[i].utf8);
+    bool ok = surf_hal_sdl_pump();
+    surf_sdl_key k;
+    while (surf_hal_sdl_poll_key(&k)) {
+        surfer_key e = {.kind = k.kind, .shift = k.shift};
+        memcpy(e.utf8, k.utf8, sizeof e.utf8);
+        surf_key_event(&e);
     }
-    return n;
+    surf_sdl_key h[8];
+    int n = surf_hal_sdl_keys_held(h, 8);
+    surfer_key held[8];
+    for (int i = 0; i < n; i++) {
+        held[i] = (surfer_key){.kind = h[i].kind, .shift = h[i].shift};
+        memcpy(held[i].utf8, h[i].utf8, sizeof held[i].utf8);
+    }
+    surf_key_set_held(held, n);
+    return ok;
 }
 
 /* desktop: one number — process cpu time over wall time (no per-core

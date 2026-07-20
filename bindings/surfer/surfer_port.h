@@ -6,41 +6,18 @@
 
 #include "surfer.h"
 
-/* kinds match the module's exported KEY_* constants */
-typedef enum {
-    SURFER_KEY_TEXT = 0,
-    SURFER_KEY_LEFT,
-    SURFER_KEY_RIGHT,
-    SURFER_KEY_UP,
-    SURFER_KEY_DOWN,
-    SURFER_KEY_PGUP,
-    SURFER_KEY_PGDN,
-    SURFER_KEY_HOME,
-    SURFER_KEY_END,
-    SURFER_KEY_BACKSPACE,
-    SURFER_KEY_DELETE,
-    SURFER_KEY_ENTER,
-} surfer_key_kind;
-
-typedef struct {
-    uint8_t kind;
-    bool    shift;
-    char    utf8[8];
-} surfer_key;
+/* surfer_key + the abstract input-feed API (surf_key_*, surf_pad_*)
+ * live in surfer.h now. This header is only the HOST/HAL bringup a
+ * platform must provide; INPUT flows the other way — a driver pushes
+ * into surfer's feed API. */
 
 /* single_buffer: p4 only — compose directly into the scan buffer (best
  * for full-screen-every-frame animation, DESIGN.md §5.6); ignored on
  * hosts without the choice. */
 const surf_hal *surfer_port_init(int16_t w, int16_t h, bool single_buffer);
-bool surfer_port_pump(void);   /* false = the host wants to quit */
-bool surfer_port_poll_key(surfer_key *out);
-/* keys currently held DOWN (state, not events): up to max entries.
- * Events (poll_key) are for typing; this is for games — held state is
- * per-frame and unlimited-rollover-agnostic (move + fire together). */
-int  surfer_port_keys_held(surfer_key *out, int max);
-/* True when a USB gamepad is actively feeding the pad API (so the
- * keyboard->pad map should yield that slot). */
-bool surfer_port_gamepad_active(void);
+bool surfer_port_pump(void);   /* false = the host wants to quit; also the
+                                * host's chance to poll input and push it
+                                * into surfer's feed API (surf_key_*) */
 /* CPU load since the previous call, one entry per core (percent).
  * Returns the core count filled (0 = unsupported on this host). */
 int  surfer_port_cpu_usage(float *pct, int max);

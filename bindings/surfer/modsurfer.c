@@ -1033,7 +1033,7 @@ static void pad_pump_keys(void)
     if (g_pad_keys < 0)
         return;
     surfer_key k[8];
-    int n = surfer_port_keys_held(k, 8);
+    int n = surf_key_held(k, 8);
     uint8_t dpad = 0;
     uint16_t btn = 0;
     for (int i = 0; i < n; i++) {
@@ -1133,7 +1133,7 @@ static mp_obj_t mod_keys(void)
 {
     mp_obj_t list = mp_obj_new_list(0, NULL);
     surfer_key k;
-    while (surfer_port_poll_key(&k)) {
+    while (surf_key_poll(&k)) {
         mp_obj_t t[3] = {
             MP_OBJ_NEW_SMALL_INT(k.kind),
             mp_obj_new_str(k.utf8, strlen(k.utf8)),
@@ -1151,7 +1151,7 @@ static MP_DEFINE_CONST_FUN_OBJ_0(mod_keys_obj, mod_keys);
 static mp_obj_t mod_keys_held(void)
 {
     surfer_key k[8];
-    int n = surfer_port_keys_held(k, 8);
+    int n = surf_key_held(k, 8);
     mp_obj_t items[8];
     for (int i = 0; i < n; i++) {
         mp_obj_t pair[2] = {
