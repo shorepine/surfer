@@ -625,6 +625,39 @@ static surfer_widget_obj_t *new_widget_obj(uint8_t kind, void *w, surf_node *nod
 static bool inited;
 
 static const surf_hal *g_hal;
+static int16_t g_scr_w, g_scr_h;
+
+/* surfer.fb_read(x, y, w, h) -> RGB888 bytes — the portable screenshot
+ * path: read the framebuffer, write it with Python file IO (the P4's
+ * MicroPython VFS is invisible to C fopen). */
+static mp_obj_t mod_fb_read(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    if (!g_hal || !g_hal->fb_ptr)
+        mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("no framebuffer"));
+    mp_int_t x = mp_obj_get_int(args[0]), y = mp_obj_get_int(args[1]);
+    mp_int_t w = mp_obj_get_int(args[2]), h = mp_obj_get_int(args[3]);
+    if (x < 0 || y < 0 || w <= 0 || h <= 0 ||
+        x + w > g_scr_w || y + h > g_scr_h)
+        mp_raise_ValueError(MP_ERROR_TEXT("region out of bounds"));
+    surfer_port_fb_sync_for_read();
+    int32_t stride;
+    const uint8_t *fb = g_hal->fb_ptr(&stride);
+    vstr_t out;
+    vstr_init_len(&out, (size_t)w * h * 3);
+    uint8_t *d = (uint8_t *)out.buf;
+    for (mp_int_t j = 0; j < h; j++) {
+        const uint16_t *row = (const uint16_t *)(fb + (y + j) * stride) + x;
+        for (mp_int_t i = 0; i < w; i++) {
+            uint16_t p = row[i];
+            *d++ = (uint8_t)(((p >> 8) & 0xf8) | (p >> 13));
+            *d++ = (uint8_t)(((p >> 3) & 0xfc) | ((p >> 9) & 0x03));
+            *d++ = (uint8_t)(((p << 3) & 0xf8) | ((p >> 2) & 0x07));
+        }
+    }
+    return mp_obj_new_bytes_from_vstr(&out);
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_fb_read_obj, 4, 4, mod_fb_read);
 
 static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
 {
@@ -639,11 +672,15 @@ static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
          * so rebuild the C scene from scratch on the surviving hal —
          * stale nodes with dangling callbacks must not outlive the VM */
         surf_deinit();
+        g_scr_w = w;
+        g_scr_h = h;
         if (!surf_init(g_hal, w, h, &cfg))
             mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("surf re-init failed"));
         return mp_const_none;
     }
     g_hal = surfer_port_init(w, h, single);
+    g_scr_w = w;
+    g_scr_h = h;
     if (!g_hal)
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("display init failed"));
     prepare_assets();
@@ -948,6 +985,7 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_image), MP_ROM_PTR(&mod_image_obj)},
     {MP_ROM_QSTR(MP_QSTR_image_new), MP_ROM_PTR(&mod_image_new_obj)},
     {MP_ROM_QSTR(MP_QSTR_layer), MP_ROM_PTR(&mod_layer_obj)},
+    {MP_ROM_QSTR(MP_QSTR_fb_read), MP_ROM_PTR(&mod_fb_read_obj)},
     {MP_ROM_QSTR(MP_QSTR_sprite), MP_ROM_PTR(&mod_sprite_obj)},
     {MP_ROM_QSTR(MP_QSTR_label), MP_ROM_PTR(&mod_label_obj)},
     {MP_ROM_QSTR(MP_QSTR_textgrid), MP_ROM_PTR(&mod_textgrid_obj)},

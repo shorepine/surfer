@@ -35,6 +35,9 @@ const surf_hal *surfer_port_init(int16_t w, int16_t h, bool single_buffer);
 bool surfer_port_pump(void);   /* false = the host wants to quit */
 bool surfer_port_poll_key(surfer_key *out);
 bool surfer_port_screenshot(const char *path);
+/* Make the framebuffer coherent for CPU reads (fb_read); no-op on hosts
+ * whose fb is always CPU-visible. */
+void surfer_port_fb_sync_for_read(void);
 /* Make an image DMA-readable in place (flash .rodata → PSRAM on device;
  * no-op on desktop). Call once per image before first use. */
 void surfer_port_prepare_image(surf_image *img);

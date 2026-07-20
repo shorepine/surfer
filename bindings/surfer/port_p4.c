@@ -258,8 +258,15 @@ bool surfer_port_poll_key(surfer_key *out)
 
 bool surfer_port_screenshot(const char *path)
 {
+    /* No C-side path: MicroPython's VFS is not IDF's. Use
+     * surfer.fb_read() from Python and write with Python file IO. */
     (void)path;
     return false;
+}
+
+void surfer_port_fb_sync_for_read(void)
+{
+    surf_hal_p4_fb_invalidate();
 }
 
 void surfer_port_prepare_image(surf_image *img)

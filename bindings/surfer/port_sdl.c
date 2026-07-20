@@ -35,3 +35,8 @@ void surfer_port_prepare_image(surf_image *img)
 {
     (void)img;  /* desktop reads .rodata just fine */
 }
+
+void surfer_port_fb_sync_for_read(void)
+{
+    /* software fb: always CPU-coherent */
+}

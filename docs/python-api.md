@@ -26,6 +26,8 @@ surfer.keys()                # drain pending key events → [(kind, text, shift)
 surfer.screen()              # the root Node
 surfer.rgb(r, g, b)          # 0-255 each → packed RGB565 color int
 surfer.screenshot(path)      # dump the framebuffer as binary PPM → bool
+                             # (desktop/web; on the P4 use fb_read + Python IO)
+surfer.fb_read(x, y, w, h)   # framebuffer region → RGB888 bytes, every port
 surfer._touch(x, y, phase)   # inject a synthetic touch (tests / on-screen keyboards)
 ```
 

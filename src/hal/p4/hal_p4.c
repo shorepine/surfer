@@ -206,6 +206,31 @@ static void h_xform_blend(const surf_image *src, surf_rect sr, surf_rect dst_r,
             return;
     }
 
+    /* Clear the scratch block first: the SRM's output size is
+     * floor(src * scale) in its own fixed point, and when that lands a
+     * pixel short of our footprint the right column / bottom row of the
+     * scratch would otherwise keep the PREVIOUS frame's pixels — a
+     * ship-colored fringe on rotated sprites. Transparent black makes
+     * the short edge simply not blend (ARGB); 565 gets black. */
+    ppa_fill_oper_config_t clr = {
+        .out = {
+            .buffer = S_xform.buf,
+            .buffer_size = S_xform.bytes,
+            .pic_w = (uint32_t)(stride / bpp),
+            .pic_h = (uint32_t)dst_r.h,
+            .block_offset_x = 0,
+            .block_offset_y = 0,
+            .fill_cm = src->format == SURF_FMT_ARGB8888
+                           ? PPA_FILL_COLOR_MODE_ARGB8888
+                           : PPA_FILL_COLOR_MODE_RGB565,
+        },
+        .fill_block_w = (uint32_t)dst_r.w,
+        .fill_block_h = (uint32_t)dst_r.h,
+        .fill_argb_color = {.val = 0},
+        .mode = PPA_TRANS_MODE_BLOCKING,
+    };
+    ppa_do_fill(S.fill_cl, &clr);
+
     /* footprint before rotation — SRM wants pre-rotation scale factors */
     int32_t w0 = (rot & 1) ? dst_r.h : dst_r.w;
     int32_t h0 = (rot & 1) ? dst_r.w : dst_r.h;
@@ -593,6 +618,13 @@ static void *h_alloc_image(size_t bytes)
 static void h_free_image(void *p)
 {
     heap_caps_free(p);
+}
+
+void surf_hal_p4_fb_invalidate(void)
+{
+    if (S.fb)
+        esp_cache_msync(S.fb, (S.fb_bytes + P4_ALIGN - 1) & ~(size_t)(P4_ALIGN - 1),
+                        ESP_CACHE_MSYNC_FLAG_DIR_M2C);
 }
 
 void surf_hal_p4_sync(const void *buf, size_t bytes)

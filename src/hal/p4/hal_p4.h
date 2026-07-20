@@ -31,4 +31,8 @@ const surf_hal *surf_hal_p4_init(const surf_hal_p4_cfg *cfg);
  * PPA will read. */
 void surf_hal_p4_sync(const void *buf, size_t bytes);
 
+/* Invalidate the CPU cache over the whole compose framebuffer before
+ * reading it back (screenshots): PPA/DMA2D wrote it behind the cache. */
+void surf_hal_p4_fb_invalidate(void);
+
 #endif /* SURF_HAL_P4_H */
