@@ -9,3 +9,7 @@ module("space_assets.py", base_path="../examples")
 # the parallax scrolling benchmark: `import parallax`
 module("parallax.py", base_path="../examples")
 module("parallax_assets.py", base_path="../examples")
+# the forest game: `import forest` (touch-drag the elf; the web REPL
+# owns the arrow keys)
+module("forest.py", base_path="../examples")
+module("forest_assets.py", base_path="../examples")

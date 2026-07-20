@@ -18,8 +18,16 @@ RX, RY = 940, 540           # the rock ring (ellipse radii)
 
 LIB = "assets/kenney/lib/"
 
+try:
+    import forest_assets as _FA   # frozen bytes (P4/web builds)
+except ImportError:
+    _FA = None
+
 
 def img(path):
+    if _FA is not None:
+        name = path.rsplit("/", 1)[-1][:-4].upper()
+        return surfer.image(getattr(_FA, name))
     with open(LIB + path, "rb") as f:
         return surfer.image(f.read())
 

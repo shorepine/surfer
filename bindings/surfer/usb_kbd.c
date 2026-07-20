@@ -10,6 +10,7 @@
 #include "freertos/task.h"
 
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "usb/usb_host.h"
 
 #include "usb_kbd.h"
@@ -24,7 +25,15 @@ static struct {
     QueueHandle_t            q;      /* surfer_key */
     uint8_t                  prev[6];
     uint8_t                  addr_pending;
+    /* software key repeat (HID boot reports carry state, not repeats) */
+    uint8_t                  held_usage;
+    uint8_t                  held_mods;
+    int64_t                  held_since_us;
+    int64_t                  last_rep_us;
 } K;
+
+#define KBD_REPEAT_DELAY_US  350000
+#define KBD_REPEAT_RATE_US    55000
 
 /* HID usage id → lowercase ascii (0 = not printable) for 0x04..0x38 */
 static const char base_map[0x39] = {
@@ -89,8 +98,21 @@ static void report_cb(usb_transfer_t *t)
             bool was = false;
             for (int j = 0; j < 6; j++)
                 was |= K.prev[j] == u;
-            if (!was)
+            if (!was) {
                 handle_usage(u, r[0]);
+                K.held_usage = u;
+                K.held_mods = r[0];
+                K.held_since_us = esp_timer_get_time();
+                K.last_rep_us = K.held_since_us;
+            }
+        }
+        /* release of the held key stops the repeat */
+        if (K.held_usage) {
+            bool still = false;
+            for (int i = 2; i < 8; i++)
+                still |= r[i] == K.held_usage;
+            if (!still)
+                K.held_usage = 0;
         }
         memcpy(K.prev, r + 2, 6);
     }
@@ -244,5 +266,17 @@ void surfer_usb_kbd_init(void)
 
 bool surfer_usb_kbd_poll(surfer_key *out)
 {
-    return K.q && xQueueReceive(K.q, out, 0) == pdTRUE;
+    if (!K.q)
+        return false;
+    /* synthesize repeats for the most recent held key (typematic feel:
+     * 350 ms delay, then ~18 Hz) */
+    if (K.held_usage && K.dev) {
+        int64_t now = esp_timer_get_time();
+        if (now - K.held_since_us > KBD_REPEAT_DELAY_US &&
+            now - K.last_rep_us > KBD_REPEAT_RATE_US) {
+            K.last_rep_us = now;
+            handle_usage(K.held_usage, K.held_mods);
+        }
+    }
+    return xQueueReceive(K.q, out, 0) == pdTRUE;
 }

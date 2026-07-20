@@ -11,3 +11,6 @@ module("space_assets.py", base_path="$(BOARD_DIR)/../../examples")
 # the parallax scrolling benchmark: `import parallax`
 module("parallax.py", base_path="$(BOARD_DIR)/../../examples")
 module("parallax_assets.py", base_path="$(BOARD_DIR)/../../examples")
+# the forest game (arrow keys / touch-drag the elf): `import forest`
+module("forest.py", base_path="$(BOARD_DIR)/../../examples")
+module("forest_assets.py", base_path="$(BOARD_DIR)/../../examples")
