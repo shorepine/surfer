@@ -133,6 +133,31 @@ def build_lava(bw, mh, axl):
     return m, x0
 
 
+def build_flame(length):
+    """Engine flame: an elongated A8 ellipse fading toward the tail.
+    One mask per length — the PPA can't scale A8, so the throttle picks
+    a baked length; .tint cycles red/orange/yellow for the flicker."""
+    h = 18
+    m = surfer.image_new(length, h, surfer.A8)
+    fade = ((length - 2, h / 2, 0xffff, 255), (0, h / 2, 0xffff, 25))
+    m.ellipse(length * 0.52, h / 2, length * 0.47, h * 0.33, fade)
+    m.ellipse(length * 0.72, h / 2, length * 0.26, h * 0.19, (0xffff, 255))
+    return m
+
+
+def build_fireball():
+    """Explosion: concentric-circle fireball (linear gradients only, so
+    the radial look is layered alpha rings) in an ARGB image — color
+    art scales in hardware, so the animation is just .scale per frame."""
+    e = surfer.image_new(64, 64, True)
+    e.circle(32, 32, 30, (surfer.rgb(255, 70, 10), 60))
+    e.circle(32, 32, 24, (surfer.rgb(255, 110, 20), 120))
+    e.circle(32, 32, 17, (surfer.rgb(255, 170, 40), 190))
+    e.circle(32, 32, 10, (surfer.rgb(255, 225, 90), 255))
+    e.circle(32, 32, 5, (surfer.rgb(255, 250, 200), 255))
+    return e
+
+
 def main():
     # game mode: vsync-lock near 30 — heavy frames (two volcanoes + a
     # full laser stream) run ~15-21 ms, so a 60-class lock would wobble
@@ -168,6 +193,29 @@ def main():
         scene.add(s)
         lavas.append((s, mask, bx + ox, mask.w, k * 2.1))
 
+    # alien saucers ride the world: they move at ground-layer speed, so
+    # they hang still in the sky while the player rushes toward them
+    ufo_imgs = [img("2d/Alien UFO Pack/shipBlue.png"),
+                img("2d/Alien UFO Pack/shipGreen.png")]
+    ufos = []
+    for i in range(6):
+        u = surfer.sprite(ufo_imgs[i % 2], 0, 0)
+        u.scale = 0.5
+        u.hidden = True
+        scene.add(u)
+        ufos.append({"s": u, "x": 0.0, "live": False})
+    spawn = {"t": 60, "y": 0}
+
+    # engine flame: baked lengths, throttle-indexed, under the ship
+    flames = []
+    for i in range(6):
+        fm = build_flame(16 + i * 11)
+        fs = surfer.sprite(fm, -100, -100)
+        fs.hidden = True
+        scene.add(fs)
+        flames.append((fs, fm))
+    FLAME = ((255, 40, 0), (255, 150, 0), (255, 230, 80))
+
     ship_img = img("2d/Space Shooter Remastered/playerShip1_blue.png")
     ship = surfer.sprite(ship_img, 180, 0)
     ship.scale = 0.55
@@ -179,6 +227,16 @@ def main():
     vel = [0.0, 0.0]
     ACC, VMAX, DRAG = 2.2, 22.0, 0.74     # px/f^2, px/f, per-frame decay (30 fps)
     ship.y_pos = int(pos[1])
+
+    # explosions: one fireball image, a sprite per possible blast; the
+    # animation is scale 0.25 -> 1.6 over 12 frames, then hide
+    fireball = build_fireball()
+    booms = []
+    for i in range(6):
+        b = surfer.sprite(fireball, 0, 0)
+        b.hidden = True
+        scene.add(b)
+        booms.append({"s": b, "t": 0, "cx": 0, "cy": 0})
 
     # laser pool: 6 circle shots, each an A8 mask with its own cycling
     # phase (purple -> pink -> green). Tiny masks: shots ride the fast
@@ -275,6 +333,80 @@ def main():
         # shift-then-move keeps old ghosts inside the healed region
         ship.x_pos = int(pos[0])
         ship.y_pos = int(pos[1])
+
+        # flame: length follows the throttle (boost 0.5..2 -> mask 0..5),
+        # one-step flicker, ember tint cycling
+        fi = int((boost - 0.5) * (len(flames) - 1) / 1.5 + 0.5)
+        if fi > 0 and f % 3 == 0:
+            fi -= 1
+        ft = (f * 0.13) % 1.0
+        ci = int(ft * 3) % 3
+        a, b = FLAME[ci], FLAME[(ci + 1) % 3]
+        u = ft * 3 - int(ft * 3)
+        for i, (fs, fm) in enumerate(flames):
+            if i != fi:
+                fs.hidden = True
+                continue
+            fs.hidden = False
+            fs.x_pos = int(pos[0]) - fm.w + 10
+            fs.y_pos = int(pos[1]) + (ship.h - 18) // 2 + 1
+            fm.tint = surfer.rgb(int(a[0] + (b[0] - a[0]) * u),
+                                 int(a[1] + (b[1] - a[1]) * u),
+                                 int(a[2] + (b[2] - a[2]) * u))
+            fs.damage()
+
+        # saucers drift with the world (ground speed); spawn from the right
+        spawn["t"] -= 1
+        if spawn["t"] <= 0:
+            for uo in ufos:
+                if not uo["live"]:
+                    uo["live"] = True
+                    uo["x"] = float(W + 70)
+                    spawn["y"] = (spawn["y"] * 73 + 41) % 331
+                    uo["s"].y_pos = 30 + spawn["y"]
+                    uo["s"].hidden = False
+                    break
+            spawn["t"] = 45 + (f * 17) % 50
+        for uo in ufos:
+            if not uo["live"]:
+                continue
+            uo["x"] -= speeds[2] * boost
+            if uo["x"] < -70:
+                uo["live"] = False
+                uo["s"].hidden = True
+                continue
+            uo["s"].x_pos = int(uo["x"])
+
+        # shot vs saucer: footprint collision -> fireball, both vanish
+        for sh in shots:
+            if not sh["live"]:
+                continue
+            for uo in ufos:
+                if uo["live"] and sh["s"].hits(uo["s"]):
+                    uo["live"] = False
+                    uo["s"].hidden = True
+                    sh["live"] = False
+                    sh["s"].hidden = True
+                    for bo in booms:
+                        if bo["t"] == 0:
+                            bo["t"] = 12
+                            bo["cx"] = int(uo["x"]) + uo["s"].w // 2
+                            bo["cy"] = uo["s"].y_pos + uo["s"].h // 2
+                            break
+                    break
+
+        for bo in booms:
+            if bo["t"] == 0:
+                continue
+            bo["t"] -= 1
+            bs = bo["s"]
+            if bo["t"] == 0:
+                bs.hidden = True
+                continue
+            bs.scale = 0.25 + (12 - bo["t"]) * 0.11
+            bs.hidden = False
+            bs.x_pos = bo["cx"] - bs.w // 2
+            bs.y_pos = bo["cy"] - bs.h // 2
 
         for k, sh in enumerate(shots):
             if not sh["live"]:

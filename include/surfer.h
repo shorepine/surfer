@@ -215,6 +215,12 @@ void surf_node_destroy(surf_node *n);  /* detaches, then frees the subtree */
 /* properties — every write damages the old and new screen rects */
 void surf_node_set_pos(surf_node *n, int16_t x, int16_t y);
 void surf_node_damage(surf_node *n);   /* force a repaint (e.g. after retint) */
+/* Do two nodes' on-screen footprints overlap? (AABB on absolute
+ * positions and w/h — transformed sprites use their transformed
+ * footprint.) False if either is hidden or detached. The collision
+ * primitive for games: cheap enough to test every bullet against
+ * every enemy every frame. */
+bool surf_node_overlaps(const surf_node *a, const surf_node *b);
 void surf_node_set_hidden(surf_node *n, bool hidden);
 void surf_rect_set_color(surf_node *n, surf_color c);
 void surf_rect_set_size(surf_node *n, int16_t w, int16_t h);

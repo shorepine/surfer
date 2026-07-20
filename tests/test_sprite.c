@@ -85,6 +85,22 @@ void run_sprite_tests(void)
 
     surf_node_destroy(s);
 
+    /* footprint collision: overlap, separation, transform, hidden */
+    surf_node *c1 = surf_sprite_new(&img64, 10, 10);
+    surf_node *c2 = surf_sprite_new(&img64, 50, 50);
+    surf_node_add(surf_screen(), c1);
+    surf_node_add(surf_screen(), c2);
+    OK(surf_node_overlaps(c1, c2));                 /* 64x64 at 40px apart */
+    surf_node_set_pos(c2, 100, 10);
+    OK(!surf_node_overlaps(c1, c2));
+    surf_sprite_set_xform(c2, SURF_ONE * 2, 0, 0);  /* 128 wide: reaches back */
+    surf_node_set_pos(c2, 70, 10);
+    OK(surf_node_overlaps(c1, c2));
+    surf_node_set_hidden(c2, true);
+    OK(!surf_node_overlaps(c1, c2));
+    surf_node_destroy(c1);
+    surf_node_destroy(c2);
+
     /* ---- load-time image builder ---- */
     surf_image *base = surf_image_new(64, 32, SURF_FMT_RGB565);
     OK(base && base->opaque && base->stride % 64 == 0);

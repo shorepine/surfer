@@ -360,6 +360,18 @@ void surf_node_damage(surf_node *n)
         surf_damage_subtree(n);
 }
 
+bool surf_node_overlaps(const surf_node *a, const surf_node *b)
+{
+    if (!a || !b || (a->flags & SURF_NF_HIDDEN) || (b->flags & SURF_NF_HIDDEN) ||
+        !surf_node_attached(a) || !surf_node_attached(b))
+        return false;
+    int16_t ax, ay, bx, by;
+    surf_node_abs_pos(a, &ax, &ay);
+    surf_node_abs_pos(b, &bx, &by);
+    return surf_rect_overlaps((surf_rect){ax, ay, a->w, a->h},
+                              (surf_rect){bx, by, b->w, b->h});
+}
+
 void surf_sprite_set_fast_pan(surf_node *n, bool on)
 {
     if (n && n->type == SURF_NODE_SPRITE)

@@ -184,9 +184,13 @@ static void composite_row(surf_image *dst, int y, const uint16_t *cov,
             int da = *d >> 24;
             int dr = (*d >> 16) & 0xff, dg = (*d >> 8) & 0xff, db = *d & 0xff;
             int oa = a + da * (255 - a) / 255;
-            int orr = (r * a + dr * da * (255 - a) / 255) / (oa ? oa : 1);
-            int og = (g * a + dg * da * (255 - a) / 255) / (oa ? oa : 1);
-            int ob = (b * a + db * da * (255 - a) / 255) / (oa ? oa : 1);
+            int inv = da * (255 - a) / 255, den = oa ? oa : 1;
+            int orr = (r * a + dr * inv) / den;
+            int og = (g * a + dg * inv) / den;
+            int ob = (b * a + db * inv) / den;
+            if (orr > 255) orr = 255;   /* integer rounding can reach 256 */
+            if (og > 255) og = 255;
+            if (ob > 255) ob = 255;
             *d = ((uint32_t)oa << 24) | ((uint32_t)orr << 16) |
                  ((uint32_t)og << 8) | (uint32_t)ob;
         } else {  /* A8 mask: coverage lands in alpha; color is .tint later */

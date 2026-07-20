@@ -267,9 +267,13 @@ void surf_image_blit(surf_image *dst, const surf_image *src, surf_rect sr,
                 uint32_t da = *d >> 24;
                 uint32_t dr = (*d >> 16) & 0xff, dg = (*d >> 8) & 0xff, db = *d & 0xff;
                 uint32_t oa = a + da * (255 - a) / 255;
-                uint32_t orr = (r * a + dr * da * (255 - a) / 255) / (oa ? oa : 1);
-                uint32_t og = (g * a + dg * da * (255 - a) / 255) / (oa ? oa : 1);
-                uint32_t ob = (b * a + db * da * (255 - a) / 255) / (oa ? oa : 1);
+                uint32_t inv = da * (255 - a) / 255, den = oa ? oa : 1;
+                uint32_t orr = (r * a + dr * inv) / den;
+                uint32_t og = (g * a + dg * inv) / den;
+                uint32_t ob = (b * a + db * inv) / den;
+                if (orr > 255) orr = 255;   /* integer rounding can reach 256 */
+                if (og > 255) og = 255;
+                if (ob > 255) ob = 255;
                 *d = (oa << 24) | (orr << 16) | (og << 8) | ob;
             }
         }

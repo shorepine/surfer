@@ -302,9 +302,17 @@ static mp_obj_t node_damage(mp_obj_t self_in)
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(node_damage_obj, node_damage);
 
+/* a.hits(b) — do the two nodes' on-screen footprints overlap? */
+static mp_obj_t node_hits(mp_obj_t self_in, mp_obj_t other_in)
+{
+    return mp_obj_new_bool(surf_node_overlaps(node_of(self_in), node_of(other_in)));
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(node_hits_obj, node_hits);
+
 static const mp_rom_map_elem_t node_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_add), MP_ROM_PTR(&node_add_obj)},
     {MP_ROM_QSTR(MP_QSTR_damage), MP_ROM_PTR(&node_damage_obj)},
+    {MP_ROM_QSTR(MP_QSTR_hits), MP_ROM_PTR(&node_hits_obj)},
     {MP_ROM_QSTR(MP_QSTR_detach), MP_ROM_PTR(&node_detach_obj)},
     {MP_ROM_QSTR(MP_QSTR_destroy), MP_ROM_PTR(&node_destroy_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_text), MP_ROM_PTR(&node_set_text_obj)},

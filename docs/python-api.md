@@ -307,6 +307,15 @@ the P4 bench panel actually refreshes at 69.7 Hz — `frame_rate(30)`
 locks 34.8 there; scale per-frame speeds by the return value if world
 speed matters. Locked demos: forest (full rate), parallax (half rate).
 
+`a.hits(b)` tests whether two nodes' on-screen footprints overlap
+(axis-aligned box test on absolute position and w/h; transformed
+sprites use their transformed footprint). It's the collision primitive
+— cheap enough to test every bullet against every enemy every frame.
+Returns False if either node is hidden or detached. parallax uses it
+for shot-vs-UFO: a hit spawns a scaling fireball (an ARGB explosion
+image animated by `.scale` — color art scales in hardware) and hides
+both nodes.
+
 `surfer.cpu()` returns busy-percent per core since the last call — two
 entries on the P4 (MicroPython runs on core 1), one process-wide entry
 on desktop, empty on web. Poll it about once a second next to an fps
