@@ -148,6 +148,7 @@ typedef struct {
     surf_node      *scrollers[8];  /* scrollviews with live momentum/spring */
     int             nscrollers;
     surf_dirty      dirty;
+    int             frame_div;   /* game-mode frame lock; 0 = uncapped */
     surf_paint_ent *plist;  /* pool_cap entries */
 } surf_ctx;
 

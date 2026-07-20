@@ -134,6 +134,14 @@ def build_lava(bw, mh, axl):
 
 
 def main():
+    # game mode: vsync-lock near 30 — heavy frames (two volcanoes + a
+    # full laser stream) run ~15-21 ms, so a 60-class lock would wobble
+    # between whole and half rate; a steady half-rate plays better than
+    # a 45-70 swing. The panel's real refresh is measured (69.7 Hz on
+    # the P4 bench board), so this locks 34.8 there; the meter should
+    # sit dead flat on it.
+    locked = surfer.frame_rate(30)
+    print("parallax: locked to %.1f fps" % locked)
     root = surfer.screen()
     scene = surfer.group(0, 0)
     root.add(scene)
@@ -142,7 +150,7 @@ def main():
     mt, volcanoes = build_mountains()
     strips = [sky, mt, build_ground()]
     ys = [0, SKY_H, SKY_H + MT_H]
-    speeds = [0.6, 3.0, 6.0]          # 0.1x / 0.5x / 1x
+    speeds = [1.2, 6.0, 12.0]         # 0.1x / 0.5x / 1x at 30 fps
     layers = []
     for strip, y in zip(strips, ys):
         l = surfer.layer(strip, 0, y, W)
@@ -169,7 +177,7 @@ def main():
     YMIN, YMAX = 16, SKY_H + MT_H - ship.h + 24
     pos = [180.0, float(SKY_H + MT_H - ship.h - 40)]
     vel = [0.0, 0.0]
-    ACC, VMAX, DRAG = 1.1, 11.0, 0.86     # px/f^2, px/f, per-frame decay
+    ACC, VMAX, DRAG = 2.2, 22.0, 0.74     # px/f^2, px/f, per-frame decay (30 fps)
     ship.y_pos = int(pos[1])
 
     # laser pool: 6 circle shots, each an A8 mask with its own cycling
@@ -268,12 +276,12 @@ def main():
         for k, sh in enumerate(shots):
             if not sh["live"]:
                 continue
-            sh["x"] += 16
+            sh["x"] += 32
             if sh["x"] > W:
                 sh["live"] = False
                 sh["s"].hidden = True
                 continue
-            sh["m"].tint = laser_color((f * 0.02 + k / 3.0) % 1.0)
+            sh["m"].tint = laser_color((f * 0.04 + k / 3.0) % 1.0)
             sh["s"].x_pos = sh["x"]   # the move damages; tint rides along
             sh["s"].y_pos = sh["y"]
 
@@ -286,7 +294,7 @@ def main():
                 continue
             s.hidden = False
             s.x_pos = int(sx)
-            glow = 0.5 + 0.5 * math.sin(f * 0.11 + phase)
+            glow = 0.5 + 0.5 * math.sin(f * 0.22 + phase)
             mask.tint = surfer.rgb(255, int(60 + 165 * glow), int(34 * glow))
             s.damage()
 

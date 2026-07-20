@@ -85,6 +85,20 @@ void surf_tick(void)
         surf_input_dispatch(&t);
     surf_scroll_tick();  /* momentum + spring-back (DESIGN.md §2.3 step 1) */
     surf_compose();
+    if (surf_g.frame_div > 0 && surf_g.hal->wait_frame)
+        surf_g.hal->wait_frame(surf_g.frame_div);
+}
+
+void surf_set_frame_divisor(int divisor)
+{
+    surf_g.frame_div = divisor > 0 ? divisor : 0;
+}
+
+float surf_frame_hz(void)
+{
+    if (surf_g.hal && surf_g.hal->frame_hz)
+        return surf_g.hal->frame_hz();
+    return 60.0f;
 }
 
 /* ---- damage ---- */

@@ -134,6 +134,15 @@ typedef struct {
      * between 19 and 60 fps). Optional; NULL means layers always
      * repaint. */
     void (*band_shift)(surf_rect r, int16_t sx, int16_t sy);
+    /* Optional frame lock (game mode): block until `divisor` panel
+     * refreshes have passed since the last locked frame — 60/divisor
+     * fps on the P4's 60 Hz panel. Early frames wait; late frames slip
+     * whole periods (quantized cadence, no catch-up bursts). NULL when
+     * the backend has no vsync to lock to. */
+    void (*wait_frame)(int divisor);
+    /* Optional: the panel's measured refresh rate in Hz (the divisor
+     * base for wait_frame). NULL → assume 60. */
+    float (*frame_hz)(void);
 } surf_hal;
 
 typedef struct surf_node surf_node;
@@ -155,6 +164,11 @@ bool       surf_init(const surf_hal *hal, int16_t w, int16_t h, const surf_confi
 void       surf_deinit(void);
 surf_node *surf_screen(void);
 void       surf_tick(void);  /* compose dirty rects + present */
+/* Game mode: lock surf_tick to panel_rate/divisor fps (see hal
+ * wait_frame). 0 (default) = uncapped. Steady 30 beats a 45-60 wobble:
+ * pick the divisor your worst frame always fits. */
+void       surf_set_frame_divisor(int divisor);
+float      surf_frame_hz(void);  /* panel refresh rate (60 if unknown) */
 
 /* node constructors (from the pool; NULL when exhausted) */
 surf_node *surf_group_new(int16_t x, int16_t y);

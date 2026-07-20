@@ -22,8 +22,9 @@
 /* P4 L2 cache line; alignment covers the hal's 64-byte contract too. */
 #define P4_ALIGN 128
 
-/* ≥ core's dirty-list cap (present never receives more rects than that) */
-#define SURF_MAX_DIRTY_P4 16
+/* ≥ core's dirty-list cap (present never receives more rects than that;
+ * a shorter list here truncates prev_r and forces full-copy forwarding) */
+#define SURF_MAX_DIRTY_P4 32
 
 static struct {
     surf_hal_p4_cfg      cfg;
@@ -42,6 +43,11 @@ static struct {
     esp_async_fbcpy_handle_t fbcpy;
     SemaphoreHandle_t    fbcpy_sem;
     bool                 scrolled;  /* force a full damage-forward at present */
+    volatile uint32_t    vsync_count;
+    SemaphoreHandle_t    vsync_sem;
+    uint32_t             pace_ref;   /* vsync count anchoring the frame lock */
+    int64_t              hz_t0_us;   /* refresh-rate measurement anchor */
+    uint32_t             hz_c0;
     int32_t              shift_acc; /* net scroll_rect shift since last present */
     /* touch edge state */
     bool                 was_down;
@@ -303,7 +309,49 @@ static bool vsync_cb(esp_lcd_panel_handle_t panel, esp_lcd_dpi_panel_event_data_
 {
     (void)panel; (void)ev; (void)arg;
     S.live = S.last_flip;
-    return false;
+    S.vsync_count++;
+    BaseType_t hp = pdFALSE;
+    if (S.vsync_sem)
+        xSemaphoreGiveFromISR(S.vsync_sem, &hp);
+    return hp == pdTRUE;
+}
+
+/* Frame lock: block until `divisor` panel refreshes have passed since
+ * the anchor (60/divisor fps). Early frames wait on the vsync ISR; a
+ * late frame slips whole periods and re-anchors — no burst catch-up,
+ * so cadence stays quantized to the panel. */
+/* Measured, not configured: the DSI PLL rounds the requested DPI clock
+ * (52 MHz asked, 60 granted on this board -> 69.7 Hz, not the 60 the
+ * timing math promises). Count real vsyncs against the clock; gather
+ * at least ~15 refreshes before answering. */
+static float h_frame_hz(void)
+{
+    if (S.nfbs != 3)
+        return 60.0f;
+    int64_t dt = esp_timer_get_time() - S.hz_t0_us;
+    uint32_t dc = S.vsync_count - S.hz_c0;
+    if (dc < 15) {
+        vTaskDelay(pdMS_TO_TICKS(250));
+        dt = esp_timer_get_time() - S.hz_t0_us;
+        dc = S.vsync_count - S.hz_c0;
+    }
+    if (dt <= 0 || dc == 0)
+        return 60.0f;
+    return (float)((double)dc * 1e6 / (double)dt);
+}
+
+static void h_wait_frame(int divisor)
+{
+    if (S.nfbs != 3 || !S.vsync_sem || divisor <= 0)
+        return;
+    uint32_t target = S.pace_ref + (uint32_t)divisor;
+    if ((int32_t)(S.vsync_count - target) >= 0) {
+        S.pace_ref = S.vsync_count;
+        return;
+    }
+    while ((int32_t)(S.vsync_count - target) < 0)
+        xSemaphoreTake(S.vsync_sem, pdMS_TO_TICKS(40));
+    S.pace_ref = target;
 }
 
 static void fwd_copy(int src_fb, int dst_fb, surf_rect r)
@@ -745,8 +793,15 @@ const surf_hal *surf_hal_p4_init(const surf_hal_p4_cfg *cfg)
             return NULL;
     }
 
+    if (S.nfbs == 3 && !S.vsync_sem)
+        S.vsync_sem = xSemaphoreCreateBinary();
+    S.hz_t0_us = esp_timer_get_time();
+    S.hz_c0 = S.vsync_count;
+
     /* streaming layers need the just-presented buffer as source */
     hal_p4.band_shift = S.nfbs == 3 ? h_band_shift : NULL;
+    hal_p4.wait_frame = S.nfbs == 3 ? h_wait_frame : NULL;
+    hal_p4.frame_hz = S.nfbs == 3 ? h_frame_hz : NULL;
 
     ppa_client_config_t fill_c = {.oper_type = PPA_OPERATION_FILL};
     ppa_client_config_t srm_c = {.oper_type = PPA_OPERATION_SRM};

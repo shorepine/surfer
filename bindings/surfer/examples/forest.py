@@ -40,6 +40,7 @@ def img(path):
 
 
 def main():
+    surfer.frame_rate(60)   # game mode: vsync-locked 60 (speeds are per-frame)
     root = surfer.screen()
     scene = surfer.group(0, 0)
     root.add(scene)
@@ -271,15 +272,7 @@ def main():
                 node.y_pos = c["y"] - campos[1]
                 node.hidden = (which == "b") != walk_b
 
-        # fixed 60 Hz pacing: critter/walk speeds must not track frame
-        # rate (idle frames are much cheaper than walking frames)
         now = time.ticks_ms()
-        spent = time.ticks_diff(now, state.get("last", now))
-        if 0 <= spent < 16:
-            time.sleep_ms(16 - spent)
-            now = time.ticks_ms()
-        state["last"] = now
-
         state["n"] += 1
         dt = time.ticks_diff(now, state["t0"])
         if dt >= 2000:

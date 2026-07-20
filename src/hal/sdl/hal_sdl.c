@@ -307,6 +307,36 @@ static void h_scroll_rect(surf_rect r, int16_t dy)
     }
 }
 
+/* clock-based frame lock at 60/divisor fps (no real vsync headless;
+ * the web build no-ops — requestAnimationFrame is the pacer there) */
+static int64_t S_pace_next;
+
+static void h_wait_frame(int divisor)
+{
+#ifndef SURF_HAL_SDL_NO_YIELD
+    int64_t period = (int64_t)divisor * 16667;
+    int64_t now = (int64_t)h_now_us();
+    if (S_pace_next == 0 || now >= S_pace_next + period) {
+        S_pace_next = now + period;   /* late or first: re-anchor */
+        return;
+    }
+    while (now < S_pace_next) {
+        int64_t left = S_pace_next - now;
+        if (left > 2000)
+            SDL_Delay((Uint32)((left - 1000) / 1000));
+        now = (int64_t)h_now_us();
+    }
+    S_pace_next += period;
+#else
+    (void)divisor;
+#endif
+}
+
+static float h_frame_hz(void)
+{
+    return 60.0f;   /* the clock pacer's base, not a real panel */
+}
+
 static void h_band_shift(surf_rect r, int16_t sx, int16_t sy)
 {
     /* single software fb: an overlap-safe memmove per row; the present
@@ -373,6 +403,8 @@ static const surf_hal hal_sdl = {
     .fb_ptr = h_fb_ptr,
     .scroll_rect = h_scroll_rect,
     .band_shift = h_band_shift,
+    .wait_frame = h_wait_frame,
+    .frame_hz = h_frame_hz,
 };
 
 /* ---- host glue ---- */

@@ -296,6 +296,17 @@ surfer.KEY_END     surfer.KEY_BACKSPACE  surfer.KEY_DELETE  surfer.KEY_ENTER
 surfer.TOUCH_DOWN  surfer.TOUCH_MOVE  surfer.TOUCH_UP
 ```
 
+`surfer.frame_rate(fps)` is game mode: it locks `surfer.tick()` to the
+nearest divisor of the panel's measured refresh rate and returns the
+actual locked fps — early frames wait for the vsync boundary, late
+frames slip whole refresh periods, so motion stays quantized to the
+panel instead of wobbling with scene load. A steady half-rate plays
+better than a 45-70 swing; pick the rate your worst frame always fits.
+`frame_rate(0)` (the default) uncaps and returns the panel rate. Note
+the P4 bench panel actually refreshes at 69.7 Hz — `frame_rate(30)`
+locks 34.8 there; scale per-frame speeds by the return value if world
+speed matters. Locked demos: forest (full rate), parallax (half rate).
+
 `surfer.keys_held()` returns the keys currently held down — state, not
 events, up to 8 at once. Poll it every frame for game controls: it has
 no repeat delay, and it's what lets a ship thrust and fire at the same

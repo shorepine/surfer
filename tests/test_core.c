@@ -243,6 +243,28 @@ static void test_pool(void)
     OK(surf_group_new(0, 0) && surf_group_new(0, 0) && surf_group_new(0, 0));
 }
 
+static void test_frame_lock(void)
+{
+    fresh(100, 100, 8);
+    nops = 0;
+    surf_tick();
+    for (int i = 0; i < nops; i++)
+        OK(ops[i].op != 'W');             /* default: uncapped */
+    surf_set_frame_divisor(2);
+    nops = 0;
+    surf_tick();
+    bool waited = false;
+    for (int i = 0; i < nops; i++)
+        if (ops[i].op == 'W' && ops[i].c == 2)
+            waited = true;
+    OK(waited);
+    surf_set_frame_divisor(0);
+    nops = 0;
+    surf_tick();
+    for (int i = 0; i < nops; i++)
+        OK(ops[i].op != 'W');
+}
+
 int main(void)
 {
     test_rect_ops();
@@ -259,6 +281,7 @@ int main(void)
     run_sprite_tests();
     run_layer_tests();
     run_shape_tests();
+    test_frame_lock();
     surf_deinit();
 
     printf("%d checks, %d failures\n", test_checks, test_failures);

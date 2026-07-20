@@ -859,6 +859,29 @@ static mp_obj_t mod_fb_read(size_t n_args, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_fb_read_obj, 4, 4, mod_fb_read);
 
+/* surfer.frame_rate(fps) — game mode: lock tick to the panel at the
+ * nearest divisor of its MEASURED refresh rate, returning the actual
+ * locked fps (this panel refreshes at 69.7 Hz, so frame_rate(30) locks
+ * 34.8 and frame_rate(60) locks 69.7 — scale per-frame speeds by the
+ * return value if it matters). 0 = uncapped (the default), returns the
+ * panel rate. Early frames wait on vsync; late frames slip whole
+ * periods, so cadence stays quantized instead of wobbling. */
+static mp_obj_t mod_frame_rate(mp_obj_t fps_in)
+{
+    mp_float_t fps = mp_obj_get_float(fps_in);
+    float hz = surf_frame_hz();
+    if (fps <= 0) {
+        surf_set_frame_divisor(0);
+        return mp_obj_new_float((mp_float_t)hz);
+    }
+    int div = (int)(hz / (float)fps + 0.5f);
+    if (div < 1)
+        div = 1;
+    surf_set_frame_divisor(div);
+    return mp_obj_new_float((mp_float_t)(hz / (float)div));
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(mod_frame_rate_obj, mod_frame_rate);
+
 /* surfer.has_touch() — did the touch controller come up? */
 static mp_obj_t mod_has_touch(void)
 {
@@ -1220,6 +1243,7 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_init), MP_ROM_PTR(&mod_init_obj)},
     {MP_ROM_QSTR(MP_QSTR_tick), MP_ROM_PTR(&mod_tick_obj)},
     {MP_ROM_QSTR(MP_QSTR_keys), MP_ROM_PTR(&mod_keys_obj)},
+    {MP_ROM_QSTR(MP_QSTR_frame_rate), MP_ROM_PTR(&mod_frame_rate_obj)},
     {MP_ROM_QSTR(MP_QSTR_keys_held), MP_ROM_PTR(&mod_keys_held_obj)},
     {MP_ROM_QSTR(MP_QSTR_screen), MP_ROM_PTR(&mod_screen_obj)},
     {MP_ROM_QSTR(MP_QSTR_rgb), MP_ROM_PTR(&mod_rgb_obj)},

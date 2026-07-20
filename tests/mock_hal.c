@@ -78,10 +78,19 @@ static void m_band_shift(surf_rect r, int16_t sx, int16_t sy)
                             .dst = {sx, sy}};
 }
 
+static void m_wait_frame(int divisor)
+{
+    ops[nops++] = (mock_op){.op = 'W', .c = (surf_color)divisor};
+}
+
 const surf_hal mock_hal = {
-    m_fill, m_blit, m_blend, m_xform_blend, m_present,
-    m_wait_idle, m_now_us, m_poll_touch, m_alloc_image, m_free_image,
-    m_fb_ptr, m_scroll_rect, m_band_shift,
+    .fill = m_fill, .blit = m_blit, .blend = m_blend,
+    .xform_blend = m_xform_blend, .present = m_present,
+    .wait_idle = m_wait_idle, .now_us = m_now_us,
+    .poll_touch = m_poll_touch,
+    .alloc_image = m_alloc_image, .free_image = m_free_image,
+    .fb_ptr = m_fb_ptr, .scroll_rect = m_scroll_rect,
+    .band_shift = m_band_shift, .wait_frame = m_wait_frame,
 };
 
 void mock_push_touch(surf_touch t)
