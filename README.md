@@ -62,6 +62,18 @@ SRM limit). Moving one repaints only what it uncovers, like any node.
 sprite is two PPA ops (SRM + blend); desktop and web use a software
 inverse-map in the hal.*
 
+![the forest game: an elf in a dense scrolling forest with wandering critters](docs/forest.png)
+
+*And a game: [examples/forest.py](bindings/surfer/examples/forest.py) —
+an elf (arrow keys, `mirror_x` to face the way it walks) in a dense
+2048×1200 scrolling forest, fenced by a ring of boulders, with slime
+critters wandering on their own and logs (dead trees at `rot=90`),
+rocks and tree trunks blocking everyone. Every sprite was found by
+grepping [assets/kenney/lib/index.tsv](assets/kenney/lib/) descriptions
+— 39k CC0 Kenney sprites indexed as `path → description → size` so a
+program (or an LLM) can pick art without looking at pixels. `import
+forest` from tulip mode.*
+
 ## The idea
 
 At 1080p RGB565, one frame is ~4 MB. On an ESP32-P4 the framebuffer lives in
