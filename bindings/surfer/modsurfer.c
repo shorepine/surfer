@@ -101,6 +101,12 @@ typedef struct {
     surf_image *img;    /* NULL after destroy() */
 } surfer_image_obj_t;
 
+typedef struct {
+    mp_obj_base_t base;
+    int idx;            /* pad slot 0..SURF_MAX_PADS-1 */
+} surfer_pad_obj_t;
+extern const mp_obj_type_t surfer_pad_type;
+
 enum { W_SLIDER, W_KNOB, W_CHECKBOX, W_DROPDOWN, W_BUTTON };
 
 typedef struct {
@@ -904,6 +910,161 @@ static mp_obj_t mod_cpu(void)
 }
 static MP_DEFINE_CONST_FUN_OBJ_0(mod_cpu_obj, mod_cpu);
 
+/* ---- Pad (controller) ----------------------------------------------
+ * A handle to one controller slot. GAMES read live state through
+ * attributes; SOURCES (drivers, the touch overlay, tests) write it
+ * through the set_* methods. The keyboard is wired to a slot for free
+ * by surfer.pad_keys(). See surfer.h for the model. */
+static mp_float_t pad_axf(int idx, int stick, int axis)
+{
+    return (mp_float_t)surf_pad_axis(idx, stick, axis) / (mp_float_t)SURF_ONE;
+}
+
+static void pad_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
+{
+    surfer_pad_obj_t *o = MP_OBJ_TO_PTR(self_in);
+    if (dest[0] != MP_OBJ_NULL)
+        return;                       /* attributes are read-only */
+    uint8_t d = surf_pad_dpad(o->idx);
+    uint16_t b = surf_pad_buttons(o->idx);
+    switch (attr) {
+    case MP_QSTR_up:     dest[0] = mp_obj_new_bool(d & SURF_DPAD_UP); return;
+    case MP_QSTR_down:   dest[0] = mp_obj_new_bool(d & SURF_DPAD_DOWN); return;
+    case MP_QSTR_left:   dest[0] = mp_obj_new_bool(d & SURF_DPAD_LEFT); return;
+    case MP_QSTR_right:  dest[0] = mp_obj_new_bool(d & SURF_DPAD_RIGHT); return;
+    case MP_QSTR_a:      dest[0] = mp_obj_new_bool(b & SURF_BTN_A); return;
+    case MP_QSTR_b:      dest[0] = mp_obj_new_bool(b & SURF_BTN_B); return;
+    case MP_QSTR_x:      dest[0] = mp_obj_new_bool(b & SURF_BTN_X); return;
+    case MP_QSTR_y:      dest[0] = mp_obj_new_bool(b & SURF_BTN_Y); return;
+    case MP_QSTR_l:      dest[0] = mp_obj_new_bool(b & SURF_BTN_L); return;
+    case MP_QSTR_r:      dest[0] = mp_obj_new_bool(b & SURF_BTN_R); return;
+    case MP_QSTR_start:  dest[0] = mp_obj_new_bool(b & SURF_BTN_START); return;
+    case MP_QSTR_select: dest[0] = mp_obj_new_bool(b & SURF_BTN_SELECT); return;
+    case MP_QSTR_lx: dest[0] = mp_obj_new_float(pad_axf(o->idx, 0, 0)); return;
+    case MP_QSTR_ly: dest[0] = mp_obj_new_float(pad_axf(o->idx, 0, 1)); return;
+    case MP_QSTR_rx: dest[0] = mp_obj_new_float(pad_axf(o->idx, 1, 0)); return;
+    case MP_QSTR_ry: dest[0] = mp_obj_new_float(pad_axf(o->idx, 1, 1)); return;
+    case MP_QSTR_dpad:    dest[0] = MP_OBJ_NEW_SMALL_INT(d); return;
+    case MP_QSTR_buttons: dest[0] = MP_OBJ_NEW_SMALL_INT(b); return;
+    default: dest[1] = MP_OBJ_SENTINEL; return;   /* let methods resolve */
+    }
+}
+
+/* pad.set_dpad(bits) — SURF_DPAD_* OR'd; replaces the whole hat */
+static mp_obj_t pad_set_dpad(mp_obj_t self_in, mp_obj_t bits)
+{
+    surfer_pad_obj_t *o = MP_OBJ_TO_PTR(self_in);
+    surf_pad_set_dpad(o->idx, (uint8_t)mp_obj_get_int(bits));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(pad_set_dpad_obj, pad_set_dpad);
+
+/* pad.set_buttons(bits) — SURF_BTN_* OR'd; replaces all buttons */
+static mp_obj_t pad_set_buttons(mp_obj_t self_in, mp_obj_t bits)
+{
+    surfer_pad_obj_t *o = MP_OBJ_TO_PTR(self_in);
+    surf_pad_set_buttons(o->idx, (uint16_t)mp_obj_get_int(bits));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_2(pad_set_buttons_obj, pad_set_buttons);
+
+/* pad.set_stick(stick, x, y) — floats in [-1, 1] */
+static mp_obj_t pad_set_stick(size_t n, const mp_obj_t *a)
+{
+    surfer_pad_obj_t *o = MP_OBJ_TO_PTR(a[0]);
+    int s = mp_obj_get_int(a[1]);
+    surf_pad_set_axis(o->idx, s, 0, (int32_t)(mp_obj_get_float(a[2]) * SURF_ONE));
+    surf_pad_set_axis(o->idx, s, 1, (int32_t)(mp_obj_get_float(a[3]) * SURF_ONE));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(pad_set_stick_obj, 4, 4, pad_set_stick);
+
+static mp_obj_t pad_reset(mp_obj_t self_in)
+{
+    surfer_pad_obj_t *o = MP_OBJ_TO_PTR(self_in);
+    surf_pad_reset(o->idx);
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(pad_reset_obj, pad_reset);
+
+static const mp_rom_map_elem_t pad_locals_table[] = {
+    {MP_ROM_QSTR(MP_QSTR_set_dpad), MP_ROM_PTR(&pad_set_dpad_obj)},
+    {MP_ROM_QSTR(MP_QSTR_set_buttons), MP_ROM_PTR(&pad_set_buttons_obj)},
+    {MP_ROM_QSTR(MP_QSTR_set_stick), MP_ROM_PTR(&pad_set_stick_obj)},
+    {MP_ROM_QSTR(MP_QSTR_reset), MP_ROM_PTR(&pad_reset_obj)},
+};
+static MP_DEFINE_CONST_DICT(pad_locals_dict, pad_locals_table);
+
+MP_DEFINE_CONST_OBJ_TYPE(surfer_pad_type, MP_QSTR_Pad, MP_TYPE_FLAG_NONE,
+                         attr, pad_attr, locals_dict, &pad_locals_dict);
+
+/* surfer.pad(n=0) -> Pad handle for slot n (0..3). Cheap; make one and
+ * read it each frame. */
+static mp_obj_t mod_pad(size_t n, const mp_obj_t *args)
+{
+    int idx = n ? mp_obj_get_int(args[0]) : 0;
+    if (idx < 0 || idx >= SURF_MAX_PADS)
+        mp_raise_ValueError(MP_ERROR_TEXT("pad index out of range"));
+    surfer_pad_obj_t *o = mp_obj_malloc(surfer_pad_obj_t, &surfer_pad_type);
+    o->idx = idx;
+    return MP_OBJ_FROM_PTR(o);
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_pad_obj, 0, 1, mod_pad);
+
+/* which pad slot the built-in keyboard map feeds each tick; -1 = off */
+static int g_pad_keys = 0;
+
+/* surfer.pad_keys(pad=0) — route the keyboard into a pad slot as a
+ * source (arrows/WASD -> dpad, space/Z -> A, X -> B, C -> X, V -> Y,
+ * Q -> L, E -> R). Pass -1 to turn the mapping off. Returns nothing. */
+static mp_obj_t mod_pad_keys(size_t n, const mp_obj_t *args)
+{
+    int p = n ? mp_obj_get_int(args[0]) : 0;
+    g_pad_keys = (p >= 0 && p < SURF_MAX_PADS) ? p : -1;
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_pad_keys_obj, 0, 1, mod_pad_keys);
+
+/* map the currently-held keys onto the keyboard pad slot (called each
+ * tick from mod_tick). Keyboard is one source among many; a real
+ * gamepad driver writes a different slot. */
+static void pad_pump_keys(void)
+{
+    if (g_pad_keys < 0)
+        return;
+    surfer_key k[8];
+    int n = surfer_port_keys_held(k, 8);
+    uint8_t dpad = 0;
+    uint16_t btn = 0;
+    for (int i = 0; i < n; i++) {
+        switch (k[i].kind) {
+        case SURFER_KEY_LEFT:  dpad |= SURF_DPAD_LEFT; break;
+        case SURFER_KEY_RIGHT: dpad |= SURF_DPAD_RIGHT; break;
+        case SURFER_KEY_UP:    dpad |= SURF_DPAD_UP; break;
+        case SURFER_KEY_DOWN:  dpad |= SURF_DPAD_DOWN; break;
+        case SURFER_KEY_TEXT: {
+            char c = k[i].utf8[0];
+            if (c >= 'A' && c <= 'Z') c += 32;   /* fold case */
+            switch (c) {
+            case 'w': dpad |= SURF_DPAD_UP; break;
+            case 's': dpad |= SURF_DPAD_DOWN; break;
+            case 'a': dpad |= SURF_DPAD_LEFT; break;
+            case 'd': dpad |= SURF_DPAD_RIGHT; break;
+            case ' ': case 'z': btn |= SURF_BTN_A; break;
+            case 'x': btn |= SURF_BTN_B; break;
+            case 'c': btn |= SURF_BTN_X; break;
+            case 'v': btn |= SURF_BTN_Y; break;
+            case 'q': btn |= SURF_BTN_L; break;
+            case 'e': btn |= SURF_BTN_R; break;
+            }
+            break;
+        }
+        }
+    }
+    surf_pad_set_dpad(g_pad_keys, dpad);
+    surf_pad_set_buttons(g_pad_keys, btn);
+}
+
 /* surfer.has_touch() — did the touch controller come up? */
 static mp_obj_t mod_has_touch(void)
 {
@@ -954,10 +1115,13 @@ static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_init_obj, 0, 3, mod_init);
 
+static void pad_pump_keys(void);   /* keyboard -> pad, defined below */
+
 static mp_obj_t mod_tick(void)
 {
     if (!surfer_port_pump())
         return mp_const_false;
+    pad_pump_keys();   /* keyboard -> pad slot (surfer.pad_keys) */
     surf_tick();
     return mp_const_true;
 }
@@ -1268,6 +1432,20 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_frame_rate), MP_ROM_PTR(&mod_frame_rate_obj)},
     {MP_ROM_QSTR(MP_QSTR_cpu), MP_ROM_PTR(&mod_cpu_obj)},
     {MP_ROM_QSTR(MP_QSTR_keys_held), MP_ROM_PTR(&mod_keys_held_obj)},
+    {MP_ROM_QSTR(MP_QSTR_pad), MP_ROM_PTR(&mod_pad_obj)},
+    {MP_ROM_QSTR(MP_QSTR_pad_keys), MP_ROM_PTR(&mod_pad_keys_obj)},
+    {MP_ROM_QSTR(MP_QSTR_DPAD_UP), MP_ROM_INT(SURF_DPAD_UP)},
+    {MP_ROM_QSTR(MP_QSTR_DPAD_DOWN), MP_ROM_INT(SURF_DPAD_DOWN)},
+    {MP_ROM_QSTR(MP_QSTR_DPAD_LEFT), MP_ROM_INT(SURF_DPAD_LEFT)},
+    {MP_ROM_QSTR(MP_QSTR_DPAD_RIGHT), MP_ROM_INT(SURF_DPAD_RIGHT)},
+    {MP_ROM_QSTR(MP_QSTR_BTN_A), MP_ROM_INT(SURF_BTN_A)},
+    {MP_ROM_QSTR(MP_QSTR_BTN_B), MP_ROM_INT(SURF_BTN_B)},
+    {MP_ROM_QSTR(MP_QSTR_BTN_X), MP_ROM_INT(SURF_BTN_X)},
+    {MP_ROM_QSTR(MP_QSTR_BTN_Y), MP_ROM_INT(SURF_BTN_Y)},
+    {MP_ROM_QSTR(MP_QSTR_BTN_L), MP_ROM_INT(SURF_BTN_L)},
+    {MP_ROM_QSTR(MP_QSTR_BTN_R), MP_ROM_INT(SURF_BTN_R)},
+    {MP_ROM_QSTR(MP_QSTR_BTN_START), MP_ROM_INT(SURF_BTN_START)},
+    {MP_ROM_QSTR(MP_QSTR_BTN_SELECT), MP_ROM_INT(SURF_BTN_SELECT)},
     {MP_ROM_QSTR(MP_QSTR_screen), MP_ROM_PTR(&mod_screen_obj)},
     {MP_ROM_QSTR(MP_QSTR_rgb), MP_ROM_PTR(&mod_rgb_obj)},
     {MP_ROM_QSTR(MP_QSTR_group), MP_ROM_PTR(&mod_group_obj)},

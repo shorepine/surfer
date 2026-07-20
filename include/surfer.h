@@ -170,6 +170,38 @@ void       surf_tick(void);  /* compose dirty rects + present */
 void       surf_set_frame_divisor(int divisor);
 float      surf_frame_hz(void);  /* panel refresh rate (60 if unknown) */
 
+/* ---- controllers (src/core/pad.c) ----------------------------------
+ * A normalized game pad: an 8-way dpad/hat, face + shoulder buttons,
+ * and two analog sticks. SOURCES write it (USB gamepad, i2c stick,
+ * the built-in keyboard map, an on-screen touch pad); GAMES read it.
+ * The whole point of the layer is that a game maps abstract pad state
+ * to actions and never learns whether the input arrived over USB, i2c,
+ * a keyboard, or a finger. Slots are for local multiplayer. Axes are
+ * Q16 in [-SURF_ONE, SURF_ONE]; a source with only a dpad leaves them
+ * zero, and a source with only a stick leaves the dpad zero — a game
+ * can read whichever it prefers (or both). */
+#define SURF_MAX_PADS 4
+enum {   /* face + shoulder buttons (bitmask) */
+    SURF_BTN_A     = 1u << 0, SURF_BTN_B      = 1u << 1,
+    SURF_BTN_X     = 1u << 2, SURF_BTN_Y      = 1u << 3,
+    SURF_BTN_L     = 1u << 4, SURF_BTN_R      = 1u << 5,
+    SURF_BTN_START = 1u << 6, SURF_BTN_SELECT = 1u << 7,
+};
+enum {   /* dpad / hat (bitmask; a diagonal is two bits set = 8-way) */
+    SURF_DPAD_UP   = 1u << 0, SURF_DPAD_DOWN  = 1u << 1,
+    SURF_DPAD_LEFT = 1u << 2, SURF_DPAD_RIGHT = 1u << 3,
+};
+/* read (games) — safe on any index; out-of-range returns neutral */
+uint8_t  surf_pad_dpad(int pad);
+uint16_t surf_pad_buttons(int pad);
+int32_t  surf_pad_axis(int pad, int stick, int axis);   /* 0=x 1=y */
+/* write (sources) — each call replaces that field; axes clamp to range */
+void surf_pad_set_dpad(int pad, uint8_t dpad);
+void surf_pad_set_buttons(int pad, uint16_t buttons);
+void surf_pad_set_axis(int pad, int stick, int axis, int32_t val_q16);
+void surf_pad_reset(int pad);       /* neutral (a source disconnected) */
+void surf_pad_reset_all(void);
+
 /* node constructors (from the pool; NULL when exhausted) */
 surf_node *surf_group_new(int16_t x, int16_t y);
 surf_node *surf_rect_new(int16_t x, int16_t y, int16_t w, int16_t h, surf_color c);

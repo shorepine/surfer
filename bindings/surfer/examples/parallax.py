@@ -262,11 +262,16 @@ def main():
                           int(a[1] + (b[1] - a[1]) * u),
                           int(a[2] + (b[2] - a[2]) * u))
 
+    # read one abstract controller: the built-in keyboard map feeds pad 0
+    # (arrows/WASD to move, space to fire), and a USB/i2c gamepad or the
+    # touch overlay would feed the same slot — the game never knows which.
+    pad = surfer.pad(0)
     try:
-        import parallax_auto        # optional test autopilot: held(frame)
-        auto_held = parallax_auto.held
+        import parallax_auto        # test autopilot: drive(frame, pad)
+        surfer.pad_keys(-1)         # it writes the pad itself; no keyboard
+        auto = parallax_auto
     except ImportError:
-        auto_held = None
+        auto = None
 
     # on-screen meters (top-left, over the slow sky band; static
     # overlays on a fast band cost their small bboxes per frame):
@@ -281,25 +286,22 @@ def main():
     def _step():
         f = state["frames"] = state["frames"] + 1
 
-        # held-state flight model (keys_held, not key events): thrust
-        # while held, drag when released — momentum, not a grid. keys()
-        # still drains the event queue so nothing leaks to the REPL.
+        # controller flight model: analog stick gives proportional
+        # thrust; a dpad/keyboard reads as full deflection. Momentum
+        # while pushed, drag when centered. keys() drains the event
+        # queue so nothing leaks to the REPL.
         surfer.keys()
+        if auto:
+            auto.drive(f, pad)
         if cool[0] > 0:
             cool[0] -= 1
-        ax = ay = 0
-        firing = False
-        for kind, text in (auto_held(f) if auto_held else surfer.keys_held()):
-            if kind == surfer.KEY_LEFT:
-                ax -= 1
-            elif kind == surfer.KEY_RIGHT:
-                ax += 1
-            elif kind == surfer.KEY_UP:
-                ay -= 1
-            elif kind == surfer.KEY_DOWN:
-                ay += 1
-            elif kind == surfer.KEY_TEXT and text == " ":
-                firing = True
+        ax = pad.lx
+        if abs(ax) < 0.2:
+            ax = 1.0 if pad.right else -1.0 if pad.left else 0.0
+        ay = pad.ly
+        if abs(ay) < 0.2:
+            ay = 1.0 if pad.down else -1.0 if pad.up else 0.0
+        firing = pad.a
         vel[0] = (vel[0] + ax * ACC) if ax else vel[0] * DRAG
         vel[1] = (vel[1] + ay * ACC) if ay else vel[1] * DRAG
         vel[0] = min(max(vel[0], -VMAX), VMAX)

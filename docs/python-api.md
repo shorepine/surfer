@@ -322,6 +322,46 @@ on desktop, empty on web. Poll it about once a second next to an fps
 meter; parallax draws both: `34 fps (35)` (measured + lock target) with
 `cpu 41% / 12%` beneath.
 
+## Controllers
+
+`surfer.pad(n)` is the game-input layer: one normalized controller
+whatever the hardware. A **source** feeds it (the built-in keyboard
+map, a USB/i2c gamepad driver, an on-screen touch pad) and a **game**
+reads it, and the game never learns which source it was. Slots `n` are
+0..3 for local multiplayer.
+
+```python
+pad = surfer.pad(0)          # make once, read every frame
+# dpad / hat (8-way = two true at once):
+pad.up  pad.down  pad.left  pad.right
+# face + shoulder buttons:
+pad.a  pad.b  pad.x  pad.y  pad.l  pad.r  pad.start  pad.select
+# two analog sticks, each -1.0..1.0:
+pad.lx  pad.ly   pad.rx  pad.ry
+```
+
+The keyboard is wired to a slot for free — `surfer.pad_keys(0)` (the
+default; `-1` turns it off). Arrows or WASD drive the dpad, space or Z
+is A, X/C/V are B/X/Y, Q/E are the shoulders. So a game reading `pad`
+works on the keyboard today and gains a gamepad the day a driver feeds
+the same slot — no game change. parallax is the reference: analog stick
+gives proportional thrust, dpad/keyboard reads as full deflection.
+
+Writing a **source** (a driver, the touch overlay, a test) uses the
+same handle:
+
+```python
+pad.set_dpad(surfer.DPAD_UP | surfer.DPAD_LEFT)   # replaces the hat
+pad.set_buttons(surfer.BTN_A | surfer.BTN_R)      # replaces all buttons
+pad.set_stick(0, 0.2, -0.9)                       # stick 0, x, y floats
+pad.reset()                                        # neutral (unplugged)
+```
+
+Each `set_*` replaces the whole field, which is what a driver holding a
+full HID report wants; a keyboard mapper assembles the bits then calls
+once. (Hardware drivers — USB HID parsing, i2c polling — live above
+surfer, in the port / tulip5; surfer owns only this abstract layer.)
+
 `surfer.keys_held()` returns the keys currently held down — state, not
 events, up to 8 at once. Poll it every frame for game controls: it has
 no repeat delay, and it's what lets a ship thrust and fire at the same

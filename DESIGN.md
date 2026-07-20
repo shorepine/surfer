@@ -160,6 +160,24 @@ relative mode by default (like every DAW), configurable to angular.
 scrollview: threshold before scroll steals the gesture from children;
 momentum + edge resistance handled in core so every backend feels identical.
 
+### 2.7b Controllers (input model)
+
+`src/core/pad.c` is a tiny normalized-state layer: SURF_MAX_PADS slots,
+each an 8-way dpad, a button bitmask (A/B/X/Y/L/R/start/select), and two
+Q16 analog sticks. It is deliberately just state + get/set — no
+hardware, no events, no frame-path involvement. SOURCES write it,
+GAMES read it, and neither knows the other. The boundary this draws:
+the abstract controller API is surfer's (any surfer app wants to read a
+gamepad without caring about the bus), but the DRIVERS that fill it —
+USB HID report parsing, i2c gamepad polling — are platform code and
+live above surfer, in the port layer / tulip5. The one source surfer
+ships itself is the keyboard map (in the binding, since key state comes
+through the port): arrows/WASD -> dpad, letter keys -> buttons, run each
+tick. A game reading a pad works on the keyboard immediately and gains
+real controllers when a driver feeds the same slot, with no game
+change. Merge policy is one-source-per-slot for now (last writer wins
+per field); multi-source-onto-one-slot is a later question.
+
 ### 2.7 Shapes (load-time vector rasterization)
 
 Vector shapes exist as a bake-time tool only (`src/core/shape.c`):
