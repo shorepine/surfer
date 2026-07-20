@@ -315,10 +315,83 @@ void surf_rect_set_size(surf_node *n, int16_t w, int16_t h)
     surf_damage_subtree(n);
 }
 
+void surf_sprite_set_fast_pan(surf_node *n, bool on)
+{
+    if (n && n->type == SURF_NODE_SPRITE)
+        n->u.sprite.fast_pan = on;
+}
+
 void surf_sprite_set_src(surf_node *n, surf_rect src)
 {
     if (!n || n->type != SURF_NODE_SPRITE)
         return;
+    surf_rect old = n->u.sprite.src;
+    int32_t dx = src.x - old.x, dy = src.y - old.y;
+    bool pan_only = src.w == old.w && src.h == old.h;
+
+    if (pan_only && dx == 0 && dy == 0) {
+        /* no-op call: if the previous change shifted, the band must
+         * repaint once — backends skip write-back bookkeeping for
+         * streaming bands (hal contract, same as layers) */
+        if (n->u.sprite.pan_shifted) {
+            n->u.sprite.pan_shifted = false;
+            surf_damage_subtree(n);
+        }
+        return;
+    }
+
+    int16_t ax, ay;
+    bool can_fast = pan_only && n->u.sprite.fast_pan && surf_g.hal->band_shift &&
+                    n->u.sprite.img->opaque &&
+                    n->u.sprite.scale_q16 == SURF_ONE && n->u.sprite.rot == 0 &&
+                    n->u.sprite.mirror == 0 && surf_node_attached(n) &&
+                    !(n->flags & SURF_NF_HIDDEN) &&
+                    dx > -src.w && dx < src.w && dy > -src.h && dy < src.h;
+    if (can_fast) {
+        surf_node_abs_pos(n, &ax, &ay);
+        surf_rect band = {ax, ay, n->w, n->h};
+        surf_rect on_scr = surf_rect_intersect(
+            band, (surf_rect){0, 0, surf_g.w, surf_g.h});
+        can_fast = on_scr.w == band.w && on_scr.h == band.h;
+        for (const surf_node *p = n->parent; can_fast && p; p = p->parent)
+            if (p->type == SURF_NODE_SCROLLVIEW || (p->flags & SURF_NF_CLIP))
+                can_fast = false;
+        if (can_fast) {
+            n->u.sprite.src = src;
+            surf_g.hal->band_shift(band, (int16_t)-dx, (int16_t)-dy);
+            n->u.sprite.pan_shifted = true;
+            int16_t adx = (int16_t)(dx < 0 ? -dx : dx);
+            int16_t ady = (int16_t)(dy < 0 ? -dy : dy);
+            /* disjoint L: the vertical sliver owns the corner — touching
+             * rects don't coalesce, overlapping ones would merge the L
+             * into a full-band repaint */
+            if (adx)
+                surf_dirty_add(&surf_g.dirty, (surf_rect){
+                    dx > 0 ? (int16_t)(band.x + band.w - adx) : band.x,
+                    band.y, adx, band.h});
+            if (ady)
+                surf_dirty_add(&surf_g.dirty, (surf_rect){
+                    dx > 0 ? band.x : (int16_t)(band.x + adx),
+                    dy > 0 ? (int16_t)(band.y + band.h - ady) : band.y,
+                    (int16_t)(band.w - adx), ady});
+            /* overlays (later siblings) smeared by the shift */
+            for (surf_node *s = n->next; s; s = s->next) {
+                if (s->flags & SURF_NF_HIDDEN)
+                    continue;
+                int16_t sx, sy;
+                surf_node_abs_pos(s, &sx, &sy);
+                surf_rect r = {(int16_t)(sx - adx), (int16_t)(sy - ady),
+                               (int16_t)(s->w + 2 * adx),
+                               (int16_t)(s->h + 2 * ady)};
+                r = surf_rect_intersect(r, band);
+                if (!surf_rect_empty(r))
+                    surf_dirty_add(&surf_g.dirty, r);
+            }
+            return;
+        }
+    }
+
+    n->u.sprite.pan_shifted = false;
     surf_damage_subtree(n);
     n->u.sprite.src = src;
     sprite_update_size(n);

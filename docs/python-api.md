@@ -136,7 +136,19 @@ s.rot = 90            # rotation in degrees CCW — multiples of 90 only
 s.mirror_x = True     # flip horizontally (walk left with right-facing art);
 s.mirror_y = True     # flips apply to the source before rotation
 s.w, s.h              # the transformed on-screen footprint
+
+s.set_src(x, y, w, h) # the camera primitive: show a window of a big image
+s.fast_scroll(True)   # ...and pan it as one DMA band shift per frame —
+                      # bake a whole game world with image_new/blit, then
+                      # pan a screen-sized src over it (call set_src every
+                      # frame; overlay sprites must be later siblings).
+                      # Measured on the P4: forest walking went 20 -> 240
+                      # fps compute rate this way.
 ```
+
+`img.blit(src, x, y, rot=0)` also takes quarter-turn rotations, so
+rotated props (a fallen tree is a standing one at rot 90) bake into the
+world at load time and the frame path stays untransformed.
 
 Taking bytes (not a path) is deliberate: the same code works from a
 unix file, the P4's flash VFS, or assets frozen into a web build (see

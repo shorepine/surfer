@@ -155,6 +155,44 @@ static uint32_t src_px(const surf_image *img, int x, int y, uint32_t *a)
     }
 }
 
+void surf_image_blit_rot(surf_image *dst, const surf_image *src,
+                         surf_rect sr, int16_t x, int16_t y, uint8_t rot)
+{
+    rot &= 3;
+    if (rot == 0) {
+        surf_image_blit(dst, src, sr, x, y);
+        return;
+    }
+    if (!dst || !src || !dst->pixels || !src->pixels)
+        return;
+    sr = surf_rect_intersect(sr, (surf_rect){0, 0, src->w, src->h});
+    int16_t ow = (rot & 1) ? sr.h : sr.w;   /* rotated footprint */
+    int16_t oh = (rot & 1) ? sr.w : sr.h;
+    for (int j = 0; j < oh; j++) {
+        int16_t dyp = (int16_t)(y + j);
+        if (dyp < 0 || dyp >= dst->h)
+            continue;
+        for (int i = 0; i < ow; i++) {
+            int16_t dxp = (int16_t)(x + i);
+            if (dxp < 0 || dxp >= dst->w)
+                continue;
+            int32_t ux, uy;   /* same CCW mapping as the hal xform */
+            switch (rot) {
+            case 1:  ux = oh - 1 - j; uy = i;            break;
+            case 2:  ux = ow - 1 - i; uy = oh - 1 - j;   break;
+            default: ux = j;          uy = ow - 1 - i;   break;
+            }
+            uint32_t a, rgb = src_px(src, sr.x + ux, sr.y + uy, &a);
+            if (a == 0)
+                continue;
+            uint32_t argb = (a << 24) | rgb;
+            surf_image one = {.pixels = &argb, .w = 1, .h = 1, .stride = 4,
+                              .format = SURF_FMT_ARGB8888};
+            surf_image_blit(dst, &one, (surf_rect){0, 0, 1, 1}, dxp, dyp);
+        }
+    }
+}
+
 void surf_image_blit(surf_image *dst, const surf_image *src, surf_rect sr,
                      int16_t x, int16_t y)
 {

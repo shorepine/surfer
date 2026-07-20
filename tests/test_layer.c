@@ -81,4 +81,50 @@ void run_layer_tests(void)
 
     surf_node_destroy(ship);
     surf_node_destroy(l);
+
+    /* ---- sprite fast pan (camera window over a big image) ---- */
+    fresh(200, 100, 16);
+    static uint16_t world_px[64];  /* pixels unused by the mock */
+    static const surf_image world = {
+        .pixels = world_px, .w = 400, .h = 300, .stride = 800,
+        .format = SURF_FMT_RGB565, .opaque = true,
+    };
+    surf_node *cam = surf_sprite_new(&world, 0, 0);
+    surf_sprite_set_src(cam, (surf_rect){50, 50, 200, 100});
+    surf_sprite_set_fast_pan(cam, true);
+    surf_node_add(surf_screen(), cam);
+    surf_node *hero = surf_rect_new(90, 40, 20, 20, 0x4321);
+    surf_node_add(surf_screen(), hero);
+    surf_tick();
+
+    nops = 0;
+    surf_sprite_set_src(cam, (surf_rect){53, 52, 200, 100});
+    surf_tick();
+    bool pan_shift = false, svert = false, shorz = false, hero_redraw = false;
+    for (int i = 0; i < nops; i++) {
+        if (ops[i].op == 'S' && ops[i].dst.x == -3 && ops[i].dst.y == -2)
+            pan_shift = true;
+        if (ops[i].op == 'B' && ops[i].dst.x == 197 && ops[i].src.w == 3)
+            svert = true;
+        if (ops[i].op == 'B' && ops[i].dst.y == 98 && ops[i].src.h == 2 &&
+            ops[i].src.w == 197)
+            shorz = true;
+        if (ops[i].op == 'F' && ops[i].c == 0x4321)
+            hero_redraw = true;
+    }
+    OK(pan_shift && svert && shorz);
+    OK(hero_redraw);
+
+    /* same-value call after a shift: heals with one full repaint */
+    nops = 0;
+    surf_sprite_set_src(cam, (surf_rect){53, 52, 200, 100});
+    surf_tick();
+    bool full = false;
+    for (int i = 0; i < nops; i++)
+        if (ops[i].op == 'B' && ops[i].src.w == 200 && ops[i].src.h == 100)
+            full = true;
+    OK(full);
+
+    surf_node_destroy(hero);
+    surf_node_destroy(cam);
 }

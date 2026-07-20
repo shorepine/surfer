@@ -51,6 +51,10 @@ surf_image *surf_image_new(int16_t w, int16_t h, surf_format format);
 void surf_image_fill(surf_image *dst, surf_rect r, surf_color c);
 void surf_image_blit(surf_image *dst, const surf_image *src, surf_rect src_r,
                      int16_t x, int16_t y);
+/* blit rotated by quarter turns CCW (bake rotated props — a fallen tree
+ * is a standing one at rot 1 — so the frame path stays untransformed) */
+void surf_image_blit_rot(surf_image *dst, const surf_image *src,
+                         surf_rect src_r, int16_t x, int16_t y, uint8_t rot);
 
 typedef enum {
     SURF_TOUCH_DOWN = 0,
@@ -170,6 +174,13 @@ void surf_node_set_hidden(surf_node *n, bool hidden);
 void surf_rect_set_color(surf_node *n, surf_color c);
 void surf_rect_set_size(surf_node *n, int16_t w, int16_t h);
 void surf_sprite_set_src(surf_node *n, surf_rect src);
+/* Fast pan (opt-in): when only src.x/src.y change on an identity,
+ * opaque, unclipped, fully-on-screen sprite — a camera window over a
+ * big baked world image — the move becomes one hal band_shift plus
+ * sliver repaints. Same contract as fast layers: later siblings
+ * overlaying the sprite get damaged as it pans; the sprite repaints
+ * fully once when panning stops (call set_src every frame). */
+void surf_sprite_set_fast_pan(surf_node *n, bool on);
 /* Uniform scale (Q16; SURF_ONE = 1:1, PPA range ~1/16..16), rotation in
  * quarter turns CCW (0..3 — the P4's SRM engine only does 90° steps),
  * and mirror (bit0 = x flip, bit1 = y flip; applied to the source before

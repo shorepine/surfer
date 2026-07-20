@@ -295,6 +295,23 @@ its own task, only `present`/PPA waits move, not callbacks.)
    triple-buffer mode — 3.3× the naive path, over the panel rate.
    Single-buffer has no pristine source for the copy, so band_shift is
    triple-only (layers fall back to full repaint there).
+
+   The same band_shift drives **sprite fast pan** (`surf_sprite_set_src`
+   + `surf_sprite_set_fast_pan`): a screen-sized src window panned over
+   a big baked world image — the 2D-scrolling-game shape. The forest
+   demo rebaked onto one 2048x1200 world image went from ~20 fps while
+   walking (full recompose of ~200 nodes) to **230-250 fps compute rate**
+   (4.2 ms/frame) on the P4. The exposed L-shaped slivers must be
+   DISJOINT rects (the vertical sliver owns the corner) — overlapping
+   slivers coalesce into a full-band repaint and silently eat the win.
+
+   **Triple-buffer forward correctness**: back-buffer selection can skip
+   a buffer when the vsync ISR lags; the skipped buffer falls 3+ frames
+   behind and rect-forwarding (which only keeps one previous frame's
+   damage) can never heal it — seen on hardware as a faint 1-in-3-frames
+   trail under sprites moving upward. Fixed with per-buffer frame
+   stamps: age 1 forwards current damage only, age 2 forwards prev +
+   current (steady state), age 3+ (or a truncated prev list) full-copies.
 5. **License.** DECIDED: MIT (stb is public domain/MIT), chosen at first
    public push.
 

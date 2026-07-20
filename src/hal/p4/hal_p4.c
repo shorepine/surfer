@@ -35,6 +35,9 @@ static struct {
     uint8_t              last_flip; /* most recently flipped (newest frame) */
     surf_rect            prev_r[SURF_MAX_DIRTY_P4];
     int                  prev_n;
+    bool                 prev_overflow;  /* prev list truncated: unusable */
+    uint32_t             frame_no;
+    uint32_t             fb_stamp[3];    /* frame each buffer is current to */
     ppa_client_handle_t  fill_cl, srm_cl, blend_cl;
     esp_async_fbcpy_handle_t fbcpy;
     SemaphoreHandle_t    fbcpy_sem;
@@ -382,9 +385,21 @@ static void h_present(const surf_rect *dirty, int n)
                             ESP_CACHE_MSYNC_FLAG_DIR_M2C);                   \
         } while (0)
 
-    if (S.scrolled) {
-        /* scroll_rect moved pixels outside the damage system's view:
-         * bring the new back buffer fully current in one copy */
+    /* How far behind is the buffer we're about to compose into? Strict
+     * rotation gives age 2 (forward prev + current damage), but when the
+     * vsync ISR lags, the rotation can skip a buffer for a cycle and the
+     * skipped one falls 3+ frames behind — damage older than the prev
+     * list is then unrecoverable rect-by-rect (that was the flickering
+     * 1-in-3-frames trail under moving sprites). Age decides:
+     *   1  → current damage only (buffer was newest last frame)
+     *   2  → prev + current (the steady state)
+     *   3+ → full copy (rare; also covers prev-list overflow) */
+    S.frame_no++;
+    uint32_t age = S.frame_no - S.fb_stamp[S.back];
+
+    if (S.scrolled || age > 2 || (age == 2 && S.prev_overflow)) {
+        /* scroll_rect moved pixels outside the damage system's view, or
+         * the buffer is too stale: bring it fully current in one copy */
         S.scrolled = false;
         S.shift_acc = 0;
         surf_rect full = {0, 0, S.cfg.w, S.cfg.h};
@@ -392,23 +407,28 @@ static void h_present(const surf_rect *dirty, int n)
         INVALIDATE_BAND(0, S.cfg.h);
         S.prev_n = 1;
         S.prev_r[0] = full;
+        S.prev_overflow = false;
+        S.fb_stamp[newest] = S.frame_no;
+        S.fb_stamp[S.back] = S.frame_no;
         return;
     }
 
     /* previous-frame damage already inside this frame's rects is about to
      * be copied anyway — steady-state animation makes that the whole list */
     int cminy = S.cfg.h, cmaxy = 0;
-    for (int i = 0; i < S.prev_n; i++) {
-        const surf_rect p = S.prev_r[i];
-        bool covered = false;
-        for (int j = 0; j < n && !covered; j++)
-            covered = dirty[j].x <= p.x && dirty[j].y <= p.y &&
-                      dirty[j].x + dirty[j].w >= p.x + p.w &&
-                      dirty[j].y + dirty[j].h >= p.y + p.h;
-        if (!covered) {
-            fwd_copy(newest, S.back, p);
-            if (p.y < cminy) cminy = p.y;
-            if (p.y + p.h > cmaxy) cmaxy = p.y + p.h;
+    if (age == 2) {
+        for (int i = 0; i < S.prev_n; i++) {
+            const surf_rect p = S.prev_r[i];
+            bool covered = false;
+            for (int j = 0; j < n && !covered; j++)
+                covered = dirty[j].x <= p.x && dirty[j].y <= p.y &&
+                          dirty[j].x + dirty[j].w >= p.x + p.w &&
+                          dirty[j].y + dirty[j].h >= p.y + p.h;
+            if (!covered) {
+                fwd_copy(newest, S.back, p);
+                if (p.y < cminy) cminy = p.y;
+                if (p.y + p.h > cmaxy) cmaxy = p.y + p.h;
+            }
         }
     }
     for (int i = 0; i < n; i++) {
@@ -420,9 +440,12 @@ static void h_present(const surf_rect *dirty, int n)
         INVALIDATE_BAND(cminy, cmaxy);
     #undef INVALIDATE_BAND
 
+    S.prev_overflow = n > SURF_MAX_DIRTY_P4;
     S.prev_n = n < SURF_MAX_DIRTY_P4 ? n : SURF_MAX_DIRTY_P4;
     for (int i = 0; i < S.prev_n; i++)
         S.prev_r[i] = dirty[i];
+    S.fb_stamp[newest] = S.frame_no;
+    S.fb_stamp[S.back] = S.frame_no;
 }
 
 static void h_wait_idle(void)

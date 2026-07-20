@@ -243,9 +243,22 @@ static mp_obj_t node_fast_scroll(mp_obj_t self_in, mp_obj_t on)
     surf_textgrid_set_fast_scroll(node_of(self_in), mp_obj_is_true(on));
     surf_scrollview_set_fast_scroll(node_of(self_in), mp_obj_is_true(on));
     surf_layer_set_fast_scroll(node_of(self_in), mp_obj_is_true(on));
+    surf_sprite_set_fast_pan(node_of(self_in), mp_obj_is_true(on));
     return mp_const_none;
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(node_fast_scroll_obj, node_fast_scroll);
+
+/* sprite.set_src(x, y, w, h) — the camera-window primitive: with
+ * fast_scroll(True) a pan over a big baked image is one band shift */
+static mp_obj_t node_set_src(size_t n_args, const mp_obj_t *args)
+{
+    (void)n_args;
+    surf_sprite_set_src(node_of(args[0]), (surf_rect){
+        (int16_t)mp_obj_get_int(args[1]), (int16_t)mp_obj_get_int(args[2]),
+        (int16_t)mp_obj_get_int(args[3]), (int16_t)mp_obj_get_int(args[4])});
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(node_set_src_obj, 5, 5, node_set_src);
 
 /* layer.set_offset(px) — float pixels; wraps at the strip width */
 static mp_obj_t node_set_offset(mp_obj_t self_in, mp_obj_t off)
@@ -291,6 +304,7 @@ static const mp_rom_map_elem_t node_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_set_cell), MP_ROM_PTR(&node_set_cell_obj)},
     {MP_ROM_QSTR(MP_QSTR_grid_scroll), MP_ROM_PTR(&node_grid_scroll_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_offset), MP_ROM_PTR(&node_set_offset_obj)},
+    {MP_ROM_QSTR(MP_QSTR_set_src), MP_ROM_PTR(&node_set_src_obj)},
     {MP_ROM_QSTR(MP_QSTR_fast_scroll), MP_ROM_PTR(&node_fast_scroll_obj)},
     {MP_ROM_QSTR(MP_QSTR_scroll_to), MP_ROM_PTR(&node_scroll_to_obj)},
     {MP_ROM_QSTR(MP_QSTR_scroll_offset), MP_ROM_PTR(&node_scroll_offset_obj)},
@@ -438,17 +452,23 @@ static surf_image *image_of(mp_obj_t o)
     return io->img;
 }
 
-/* img.blit(src, x, y) — load-time composition; never call per frame */
+/* img.blit(src, x, y, rot=0) — load-time composition (rot in degrees
+ * CCW, quarter turns); never call per frame */
 static mp_obj_t image_blit(size_t n_args, const mp_obj_t *args)
 {
     surf_image *dst = image_of(args[0]);
     surf_image *src = image_of(args[1]);
-    surf_image_blit(dst, src, (surf_rect){0, 0, src->w, src->h},
-                    (int16_t)mp_obj_get_int(args[2]),
-                    (int16_t)mp_obj_get_int(args[3]));
+    mp_int_t deg = n_args > 4 ? mp_obj_get_int(args[4]) : 0;
+    deg = ((deg % 360) + 360) % 360;
+    if (deg % 90)
+        mp_raise_ValueError(MP_ERROR_TEXT("rot must be a multiple of 90"));
+    surf_image_blit_rot(dst, src, (surf_rect){0, 0, src->w, src->h},
+                        (int16_t)mp_obj_get_int(args[2]),
+                        (int16_t)mp_obj_get_int(args[3]),
+                        (uint8_t)(deg / 90));
     return mp_const_none;
 }
-static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(image_blit_obj, 4, 4, image_blit);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(image_blit_obj, 4, 5, image_blit);
 
 /* img.fill(color[, x, y, w, h]) */
 static mp_obj_t image_fill(size_t n_args, const mp_obj_t *args)
