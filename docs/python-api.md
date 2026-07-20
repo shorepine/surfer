@@ -40,6 +40,25 @@ while surfer.tick():
 Widget callbacks fire from inside `surfer.tick()`, on the same thread —
 no locks, no marshaling.
 
+**Except on the web** (`sys.platform == "webassembly"`), where a
+blocking loop would freeze the tab: the browser drives one frame per
+`requestAnimationFrame`, and an app registers its per-frame work as a
+hook instead of looping:
+
+```python
+import sys, tulip
+if sys.platform == "webassembly":
+    tulip.app_frame = my_step      # called once per frame after the REPL;
+else:                              # return False to unhook
+    while surfer.tick():
+        if my_step() is False:
+            break
+```
+
+See [examples/space.py](../bindings/surfer/examples/space.py) and
+[examples/gamma9001.py](../bindings/surfer/examples/gamma9001.py) for
+the full pattern.
+
 ## Nodes
 
 Nodes are the scene graph: cheap, pooled, retained. All factory
@@ -52,6 +71,7 @@ arguments are positional (the `name=` forms below just show defaults):
 | `surfer.label(text, x, y, color=white, font=FONT_UI16)` | proportional text |
 | `surfer.textgrid(cols, rows, fg=..., bg=..., font=FONT_MONO16)` | fast fixed-width text (terminals, editors) |
 | `surfer.scrollview(x, y, w, h)` | clipped viewport; drag/flick scrolls its children |
+| `surfer.sprite(image, x, y)` | a runtime image on screen — see [Images & sprites](#images--sprites) |
 
 Every node has:
 
@@ -93,6 +113,45 @@ The node captures the gesture DOWN→UP like any widget; an enclosing
 scrollview can still steal it after 8 px of travel (act on UP near the
 DOWN point for tap semantics — see the step pads in
 [examples/gamma9001.py](../bindings/surfer/examples/gamma9001.py)).
+
+## Images & sprites
+
+Load a PNG at runtime (any size, alpha channel respected) and put it on
+screen as a sprite:
+
+```python
+img = surfer.image(open("ship.png", "rb").read())   # bytes in → Image
+img.w, img.h          # decoded size (read-only)
+img.destroy()         # free the pixels — only after every sprite using it is gone
+
+s = surfer.sprite(img, x, y)
+screen.add(s)
+s.x_pos = 300         # move it: the compositor repaints whatever it uncovers —
+                      # nothing under the sprite needs manual redrawing
+s.scale = 1.5         # uniform scale, 1/16 .. 16 (float; the PPA SRM range)
+s.rot = 90            # rotation in degrees CCW — multiples of 90 only
+                      # (the ESP32-P4's SRM engine rotates in quarter turns)
+s.w, s.h              # the transformed on-screen footprint
+```
+
+Taking bytes (not a path) is deliberate: the same code works from a
+unix file, the P4's flash VFS, or assets frozen into a web build (see
+`tools/pngwrap.py`, which bakes PNGs into an importable module).
+
+A PNG with no transparent pixels draws on the fast opaque path
+automatically. At `scale == 1.0, rot == 0` a sprite composites exactly
+like any other node; transformed sprites go through the hal's
+scale/rotate op (PPA SRM + blend on device, ~200–400 µs per sprite per
+damaged frame — dozens per frame are fine).
+
+Sprites keep a reference to their `Image`, so the GC won't collect
+pixels that are still on screen. Sprite-sheet sub-rects and mirroring
+aren't exposed yet.
+
+The full demo is [examples/space.py](../bindings/surfer/examples/space.py)
+(`import space` from tulip mode): draggable ship, tumbling meteors at
+mixed scales, autofiring lasers — Kenney CC0 art from
+[assets/kenney/](../assets/kenney/).
 
 ## Widgets
 

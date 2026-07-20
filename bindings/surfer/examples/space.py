@@ -120,7 +120,7 @@ def main():
     while surfer.tick():
         if _step() is False:
             return
-        if shot and state["frames"] == 30:
+        if shot and state["frames"] == 60:  # late enough to catch a laser
             surfer.screenshot(shot)
             return
 
