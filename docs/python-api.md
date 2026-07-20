@@ -342,10 +342,14 @@ pad.lx  pad.ly   pad.rx  pad.ry
 
 The keyboard is wired to a slot for free — `surfer.pad_keys(0)` (the
 default; `-1` turns it off). Arrows or WASD drive the dpad, space or Z
-is A, X/C/V are B/X/Y, Q/E are the shoulders. So a game reading `pad`
-works on the keyboard today and gains a gamepad the day a driver feeds
-the same slot — no game change. parallax is the reference: analog stick
-gives proportional thrust, dpad/keyboard reads as full deflection.
+is A, X/C/V are B/X/Y, Q/E are the shoulders. A USB gamepad driver
+feeds the same slot, and the two **merge** — the pad's digital controls
+have two source channels that reads OR together (gamepad = source 0,
+keyboard = source 1), so with both plugged in either one drives the
+pad, neither clobbering the other. A game reading `pad` therefore works
+on the keyboard or a controller with no change. parallax is the
+reference: analog stick gives proportional thrust, dpad/keyboard reads
+as full deflection, and either input flies it.
 
 Writing a **source** (a driver, the touch overlay, a test) uses the
 same handle:

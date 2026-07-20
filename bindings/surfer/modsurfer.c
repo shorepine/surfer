@@ -1032,10 +1032,6 @@ static void pad_pump_keys(void)
 {
     if (g_pad_keys < 0)
         return;
-    /* a real gamepad owns pad 0 while it's plugged in — don't let the
-     * keyboard map zero it out every tick */
-    if (g_pad_keys == 0 && surfer_port_gamepad_active())
-        return;
     surfer_key k[8];
     int n = surfer_port_keys_held(k, 8);
     uint8_t dpad = 0;
@@ -1065,8 +1061,10 @@ static void pad_pump_keys(void)
         }
         }
     }
-    surf_pad_set_dpad(g_pad_keys, dpad);
-    surf_pad_set_buttons(g_pad_keys, btn);
+    /* source 1: the gamepad driver writes source 0, so a keyboard and a
+     * gamepad merge and either drives the pad */
+    surf_pad_set_dpad_src(g_pad_keys, 1, dpad);
+    surf_pad_set_buttons_src(g_pad_keys, 1, btn);
 }
 
 /* surfer.has_touch() — did the touch controller come up? */

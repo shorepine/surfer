@@ -30,8 +30,8 @@
 /* ESP32-P4-Function-EV-Board wiring (from the BSP) */
 #define LCD_W            1024
 #define LCD_H            600
-#define PIN_BACKLIGHT    26
-#define PIN_LCD_RST      27
+#define PIN_BACKLIGHT    4     /* moved off 26: FS-USB D- */
+#define PIN_LCD_RST      5     /* moved off 27: FS-USB D+ */
 #define PIN_I2C_SDA      7
 #define PIN_I2C_SCL      8
 #define DSI_LANES        2

@@ -195,9 +195,15 @@ enum {   /* dpad / hat (bitmask; a diagonal is two bits set = 8-way) */
 uint8_t  surf_pad_dpad(int pad);
 uint16_t surf_pad_buttons(int pad);
 int32_t  surf_pad_axis(int pad, int stick, int axis);   /* 0=x 1=y */
-/* write (sources) — each call replaces that field; axes clamp to range */
+/* write (sources) — each call replaces that field; axes clamp to range.
+ * Digital controls have TWO source channels that reads OR together, so
+ * a gamepad (source 0) and the keyboard map (source 1) can both drive
+ * one pad and either works. set_dpad/set_buttons target source 0; the
+ * _src variants pick the channel. */
 void surf_pad_set_dpad(int pad, uint8_t dpad);
 void surf_pad_set_buttons(int pad, uint16_t buttons);
+void surf_pad_set_dpad_src(int pad, int src, uint8_t dpad);
+void surf_pad_set_buttons_src(int pad, int src, uint16_t buttons);
 void surf_pad_set_axis(int pad, int stick, int axis, int32_t val_q16);
 void surf_pad_reset(int pad);       /* neutral (a source disconnected) */
 void surf_pad_reset_all(void);

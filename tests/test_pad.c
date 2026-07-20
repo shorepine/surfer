@@ -46,4 +46,19 @@ void run_pad_tests(void)
     OK(surf_pad_buttons(1) == SURF_BTN_B);
     surf_pad_reset_all();
     OK(surf_pad_buttons(1) == 0);
+
+    /* two sources merge (OR): a gamepad on src 0 and a keyboard on src 1
+     * both drive one pad, neither clobbering the other */
+    surf_pad_set_dpad_src(0, 0, SURF_DPAD_LEFT);      /* gamepad */
+    surf_pad_set_dpad_src(0, 1, SURF_DPAD_UP);        /* keyboard */
+    OK(surf_pad_dpad(0) == (SURF_DPAD_LEFT | SURF_DPAD_UP));
+    surf_pad_set_buttons_src(0, 0, SURF_BTN_A);
+    surf_pad_set_buttons_src(0, 1, SURF_BTN_B);
+    OK(surf_pad_buttons(0) == (SURF_BTN_A | SURF_BTN_B));
+    surf_pad_set_dpad_src(0, 1, 0);                   /* release keyboard */
+    OK(surf_pad_dpad(0) == SURF_DPAD_LEFT);           /* gamepad survives */
+    OK(surf_pad_dpad(0) & SURF_DPAD_LEFT);
+    surf_pad_set_dpad(0, SURF_DPAD_RIGHT);            /* public = source 0 */
+    OK(surf_pad_dpad(0) == SURF_DPAD_RIGHT);
+    surf_pad_reset_all();
 }
