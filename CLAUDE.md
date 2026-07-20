@@ -186,6 +186,7 @@ documented in-file), assets copied flash→PSRAM at init, and
 `usb_kbd.c`, a raw-usb_host HID boot-protocol keyboard for the USB-A
 port. Board def `bindings/surfer/boards/SURFER_P4/` freezes tulip.py
 (6MiB app partition — the binary carries the baked assets). Flash with
-`make mpy-p4-flash PORT=...`, then `import tulip` at the serial REPL.
+`make mpy-p4-flash PORT=...`; the board boots straight into tulip
+mode (frozen main.py) — Ctrl-C on the serial console drops to the REPL.
 Soft-reset re-inits the C scene (mod_init tears down on re-entry).
 Remaining: on-device tulip verify, M6 web build + real art.
