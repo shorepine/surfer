@@ -126,6 +126,16 @@ img = surfer.image(open("ship.png", "rb").read())   # bytes in → Image
 img.w, img.h          # decoded size (read-only)
 img.destroy()         # free the pixels — only after every sprite using it is gone
 
+# Amiga-style color cycling — a one-entry hardware palette. a8=True keeps
+# only the PNG's alpha channel; the mask draws in .tint (rgb565), which
+# the P4's PPA applies at blend time. Retint + damage() per frame costs
+# the same as drawing the sprite once — no pixels are recomputed.
+# `import pulse` is the demo: 22 masks cycling at a locked 62 fps.
+mask = surfer.image(png_bytes, True)
+mask.tint = surfer.rgb(255, 40, 200)
+spr = surfer.sprite(mask, x, y)
+spr.damage()          # content changed in place: force a repaint
+
 s = surfer.sprite(img, x, y)
 screen.add(s)
 s.x_pos = 300         # move it: the compositor repaints whatever it uncovers —

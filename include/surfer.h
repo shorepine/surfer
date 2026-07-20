@@ -39,6 +39,10 @@ typedef struct {
  * (opaque flag set when the file has no transparency). Destroy only
  * after every node using the image is gone. */
 surf_image *surf_image_from_png(const void *data, size_t len);
+/* The PNG's alpha channel as an A8 mask: draws in the image's `tint`
+ * color — a one-entry palette the P4 blends in hardware. Retint + damage
+ * the sprite each frame for Amiga-style color cycling. */
+surf_image *surf_image_from_png_a8(const void *data, size_t len);
 void        surf_image_destroy(surf_image *img);
 
 /* Load-time image composition: bake tile maps / parallax strips into one
@@ -170,6 +174,7 @@ void surf_node_destroy(surf_node *n);  /* detaches, then frees the subtree */
 
 /* properties — every write damages the old and new screen rects */
 void surf_node_set_pos(surf_node *n, int16_t x, int16_t y);
+void surf_node_damage(surf_node *n);   /* force a repaint (e.g. after retint) */
 void surf_node_set_hidden(surf_node *n, bool hidden);
 void surf_rect_set_color(surf_node *n, surf_color c);
 void surf_rect_set_size(surf_node *n, int16_t w, int16_t h);

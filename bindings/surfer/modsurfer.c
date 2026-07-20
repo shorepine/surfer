@@ -292,8 +292,19 @@ static mp_obj_t node_scroll_to(mp_obj_t self_in, mp_obj_t x, mp_obj_t y)
 }
 static MP_DEFINE_CONST_FUN_OBJ_3(node_scroll_to_obj, node_scroll_to);
 
+/* n.damage() — force a repaint of the node's pixels. Needed when the
+ * content changed but the node didn't move: e.g. retinting an A8 image
+ * for color cycling. */
+static mp_obj_t node_damage(mp_obj_t self_in)
+{
+    surf_node_damage(node_of(self_in));
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(node_damage_obj, node_damage);
+
 static const mp_rom_map_elem_t node_locals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_add), MP_ROM_PTR(&node_add_obj)},
+    {MP_ROM_QSTR(MP_QSTR_damage), MP_ROM_PTR(&node_damage_obj)},
     {MP_ROM_QSTR(MP_QSTR_detach), MP_ROM_PTR(&node_detach_obj)},
     {MP_ROM_QSTR(MP_QSTR_destroy), MP_ROM_PTR(&node_destroy_obj)},
     {MP_ROM_QSTR(MP_QSTR_set_text), MP_ROM_PTR(&node_set_text_obj)},
@@ -505,6 +516,18 @@ static void image_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
             dest[0] = MP_OBJ_NEW_SMALL_INT(o->img->h);
             return;
         }
+        if (attr == MP_QSTR_tint) {
+            dest[0] = MP_OBJ_NEW_SMALL_INT(o->img->tint);
+            return;
+        }
+    }
+    /* store: img.tint = rgb565 (A8 masks: the color the alpha draws in;
+     * retint + sprite.damage() per frame = hardware color cycling) */
+    if (dest[0] != MP_OBJ_NULL && dest[1] != MP_OBJ_NULL &&
+        attr == MP_QSTR_tint && o->img) {
+        o->img->tint = (surf_color)mp_obj_get_int(dest[1]);
+        dest[0] = MP_OBJ_NULL;
+        return;
     }
     if (dest[0] == MP_OBJ_NULL)
         dest[1] = MP_OBJ_SENTINEL;
@@ -774,20 +797,24 @@ static mp_obj_t mod_group(mp_obj_t x, mp_obj_t y)
 }
 static MP_DEFINE_CONST_FUN_OBJ_2(mod_group_obj, mod_group);
 
-/* surfer.image(png_bytes) -> Image. Read the file in Python — bytes work
- * the same on unix, the P4's VFS, and web MEMFS/frozen assets. */
-static mp_obj_t mod_image(mp_obj_t data_in)
+/* surfer.image(png_bytes, a8=False) -> Image. Read the file in Python —
+ * bytes work the same on unix, the P4's VFS, and web MEMFS/frozen
+ * assets. a8=True keeps only the alpha channel: the mask draws in
+ * .tint (a one-entry palette, blended in hardware on the P4). */
+static mp_obj_t mod_image(size_t n_args, const mp_obj_t *args)
 {
     mp_buffer_info_t buf;
-    mp_get_buffer_raise(data_in, &buf, MP_BUFFER_READ);
-    surf_image *img = surf_image_from_png(buf.buf, buf.len);
+    mp_get_buffer_raise(args[0], &buf, MP_BUFFER_READ);
+    bool a8 = n_args > 1 && mp_obj_is_true(args[1]);
+    surf_image *img = a8 ? surf_image_from_png_a8(buf.buf, buf.len)
+                         : surf_image_from_png(buf.buf, buf.len);
     if (!img)
         mp_raise_ValueError(MP_ERROR_TEXT("png decode failed"));
     surfer_image_obj_t *o = mp_obj_malloc(surfer_image_obj_t, &surfer_image_type);
     o->img = img;
     return MP_OBJ_FROM_PTR(o);
 }
-static MP_DEFINE_CONST_FUN_OBJ_1(mod_image_obj, mod_image);
+static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_image_obj, 1, 2, mod_image);
 
 /* surfer.image_new(w, h, alpha=False) -> blank Image for load-time
  * composition (bake tile maps / parallax strips into one image) */

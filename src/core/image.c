@@ -65,6 +65,41 @@ surf_image *surf_image_from_png(const void *data, size_t len)
     return img;
 }
 
+surf_image *surf_image_from_png_a8(const void *data, size_t len)
+{
+    if (!surf_g.hal)
+        return NULL;
+    int w, h, comp;
+    unsigned char *rgba = stbi_load_from_memory(data, (int)len, &w, &h, &comp, 4);
+    if (!rgba)
+        return NULL;
+    surf_image *img = malloc(sizeof *img);
+    int32_t stride = ((int32_t)w + 63) & ~63;
+    uint8_t *px = img ? surf_g.hal->alloc_image((size_t)stride * h) : NULL;
+    if (!px) {
+        stbi_image_free(rgba);
+        free(img);
+        return NULL;
+    }
+    for (int y = 0; y < h; y++) {
+        const unsigned char *s = rgba + (size_t)y * w * 4;
+        uint8_t *d = px + (size_t)y * stride;
+        for (int x = 0; x < w; x++)
+            d[x] = s[x * 4 + 3];
+    }
+    stbi_image_free(rgba);
+    *img = (surf_image){
+        .pixels = px,
+        .w = (int16_t)w,
+        .h = (int16_t)h,
+        .stride = stride,
+        .format = SURF_FMT_A8,
+        .opaque = false,
+        .tint = 0xffff,
+    };
+    return img;
+}
+
 void surf_image_destroy(surf_image *img)
 {
     if (!img)

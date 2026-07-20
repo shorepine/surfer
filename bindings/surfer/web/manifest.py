@@ -13,3 +13,5 @@ module("parallax_assets.py", base_path="../examples")
 # owns the arrow keys)
 module("forest.py", base_path="../examples")
 module("forest_assets.py", base_path="../examples")
+
+module("pulse.py", base_path="../examples")

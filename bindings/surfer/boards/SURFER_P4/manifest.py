@@ -14,3 +14,5 @@ module("parallax_assets.py", base_path="$(BOARD_DIR)/../../examples")
 # the forest game (arrow keys / touch-drag the elf): `import forest`
 module("forest.py", base_path="$(BOARD_DIR)/../../examples")
 module("forest_assets.py", base_path="$(BOARD_DIR)/../../examples")
+# A8 tint color cycling (hardware one-entry palette): `import pulse`
+module("pulse.py", base_path="$(BOARD_DIR)/../../examples")

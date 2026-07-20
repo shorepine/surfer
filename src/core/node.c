@@ -315,6 +315,12 @@ void surf_rect_set_size(surf_node *n, int16_t w, int16_t h)
     surf_damage_subtree(n);
 }
 
+void surf_node_damage(surf_node *n)
+{
+    if (n)
+        surf_damage_subtree(n);
+}
+
 void surf_sprite_set_fast_pan(surf_node *n, bool on)
 {
     if (n && n->type == SURF_NODE_SPRITE)
