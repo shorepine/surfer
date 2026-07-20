@@ -307,6 +307,12 @@ the P4 bench panel actually refreshes at 69.7 Hz — `frame_rate(30)`
 locks 34.8 there; scale per-frame speeds by the return value if world
 speed matters. Locked demos: forest (full rate), parallax (half rate).
 
+`surfer.cpu()` returns busy-percent per core since the last call — two
+entries on the P4 (MicroPython runs on core 1), one process-wide entry
+on desktop, empty on web. Poll it about once a second next to an fps
+meter; parallax draws both: `34 fps (35)` (measured + lock target) with
+`cpu 41% / 12%` beneath.
+
 `surfer.keys_held()` returns the keys currently held down — state, not
 events, up to 8 at once. Poll it every frame for game controls: it has
 no repeat delay, and it's what lets a ship thrust and fire at the same

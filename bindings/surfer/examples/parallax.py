@@ -210,10 +210,13 @@ def main():
     except ImportError:
         auto_held = None
 
-    # on-screen fps meter (top-left, over the slow sky band; a static
-    # overlay on a fast band costs its small bbox per frame)
+    # on-screen meters (top-left, over the slow sky band; static
+    # overlays on a fast band cost their small bboxes per frame):
+    # "34 fps (35)" = measured (vsync lock target), cpu busy per core
     meter = surfer.label("-- fps", 12, 8, surfer.rgb(255, 255, 160))
     scene.add(meter)
+    cpu_meter = surfer.label("", 12, 30, surfer.rgb(255, 255, 160))
+    scene.add(cpu_meter)
 
     state = {"frames": 0, "t0": time.ticks_ms(), "n": 0}
 
@@ -304,7 +307,11 @@ def main():
         if dt >= 1000:
             fps = state["n"] * 1000.0 / dt
             print("parallax: %.1f fps (%.2f ms/frame)" % (fps, dt / state["n"]))
-            meter.set_text("%d fps" % int(fps + 0.5))
+            meter.set_text("%d fps (%d)" % (int(fps + 0.5), int(locked + 0.5)))
+            cpu = surfer.cpu()
+            if cpu:
+                cpu_meter.set_text("cpu " + " / ".join(
+                    "%d%%" % int(c + 0.5) for c in cpu))
             state["t0"] = now
             state["n"] = 0
         return True

@@ -882,6 +882,20 @@ static mp_obj_t mod_frame_rate(mp_obj_t fps_in)
 }
 static MP_DEFINE_CONST_FUN_OBJ_1(mod_frame_rate_obj, mod_frame_rate);
 
+/* surfer.cpu() -> (pct, ...) busy percent per core since the last call
+ * (one entry per core on the P4, one process-wide entry on desktop,
+ * empty on web). Poll it about once a second alongside an fps meter. */
+static mp_obj_t mod_cpu(void)
+{
+    float pct[4];
+    int n = surfer_port_cpu_usage(pct, 4);
+    mp_obj_t items[4];
+    for (int i = 0; i < n; i++)
+        items[i] = mp_obj_new_float((mp_float_t)pct[i]);
+    return mp_obj_new_tuple((size_t)n, items);
+}
+static MP_DEFINE_CONST_FUN_OBJ_0(mod_cpu_obj, mod_cpu);
+
 /* surfer.has_touch() — did the touch controller come up? */
 static mp_obj_t mod_has_touch(void)
 {
@@ -1244,6 +1258,7 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_tick), MP_ROM_PTR(&mod_tick_obj)},
     {MP_ROM_QSTR(MP_QSTR_keys), MP_ROM_PTR(&mod_keys_obj)},
     {MP_ROM_QSTR(MP_QSTR_frame_rate), MP_ROM_PTR(&mod_frame_rate_obj)},
+    {MP_ROM_QSTR(MP_QSTR_cpu), MP_ROM_PTR(&mod_cpu_obj)},
     {MP_ROM_QSTR(MP_QSTR_keys_held), MP_ROM_PTR(&mod_keys_held_obj)},
     {MP_ROM_QSTR(MP_QSTR_screen), MP_ROM_PTR(&mod_screen_obj)},
     {MP_ROM_QSTR(MP_QSTR_rgb), MP_ROM_PTR(&mod_rgb_obj)},

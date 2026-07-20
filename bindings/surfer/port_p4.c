@@ -7,6 +7,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/idf_additions.h"
 
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
@@ -259,6 +260,30 @@ bool surfer_port_poll_key(surfer_key *out)
 int surfer_port_keys_held(surfer_key *out, int max)
 {
     return surfer_usb_kbd_held(out, max);
+}
+
+/* busy%% per core = 1 - idle-task runtime share, from the FreeRTOS
+ * runtime counters (µs, esp_timer stats clock — sdkconfig.surfer turns
+ * them on). Delta since the previous call; first call averages since
+ * boot. */
+int surfer_port_cpu_usage(float *pct, int max)
+{
+    static uint32_t last_idle[2];
+    static int64_t  last_t;
+    int64_t now = esp_timer_get_time();
+    int n = max < 2 ? max : 2;
+    for (int i = 0; i < n; i++) {
+        uint32_t idle = ulTaskGetIdleRunTimeCounterForCore(i);
+        int64_t dt = now - last_t;
+        uint32_t di = idle - last_idle[i];
+        float busy = dt > 0 ? 100.0f * (1.0f - (float)di / (float)dt) : 0.0f;
+        if (busy < 0.0f) busy = 0.0f;
+        if (busy > 100.0f) busy = 100.0f;
+        pct[i] = busy;
+        last_idle[i] = idle;
+    }
+    last_t = now;
+    return n;
 }
 
 bool surfer_port_screenshot(const char *path)

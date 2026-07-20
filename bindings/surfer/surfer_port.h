@@ -38,6 +38,9 @@ bool surfer_port_poll_key(surfer_key *out);
  * Events (poll_key) are for typing; this is for games — held state is
  * per-frame and unlimited-rollover-agnostic (move + fire together). */
 int  surfer_port_keys_held(surfer_key *out, int max);
+/* CPU load since the previous call, one entry per core (percent).
+ * Returns the core count filled (0 = unsupported on this host). */
+int  surfer_port_cpu_usage(float *pct, int max);
 bool surfer_port_screenshot(const char *path);
 /* Make the framebuffer coherent for CPU reads (fb_read); no-op on hosts
  * whose fb is always CPU-visible. */

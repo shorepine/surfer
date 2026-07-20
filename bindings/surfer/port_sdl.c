@@ -1,5 +1,9 @@
 /* Desktop (unix port) platform glue: SDL hal + SDL keyboard. */
 #include <string.h>
+#ifndef __EMSCRIPTEN__
+#include <sys/resource.h>
+#include <sys/time.h>
+#endif
 
 #include "surfer_port.h"
 #include "hal_sdl.h"
@@ -38,6 +42,38 @@ int surfer_port_keys_held(surfer_key *out, int max)
         memcpy(out[i].utf8, k[i].utf8, sizeof out[i].utf8);
     }
     return n;
+}
+
+/* desktop: one number — process cpu time over wall time (no per-core
+ * story for a windowed process); web has neither */
+int surfer_port_cpu_usage(float *pct, int max)
+{
+#ifndef __EMSCRIPTEN__
+    if (max < 1)
+        return 0;
+    static int64_t last_cpu_us, last_wall_us;
+    struct rusage ru;
+    struct timeval tv;
+    if (getrusage(RUSAGE_SELF, &ru) != 0)
+        return 0;
+    gettimeofday(&tv, NULL);
+    int64_t cpu = (int64_t)ru.ru_utime.tv_sec * 1000000 + ru.ru_utime.tv_usec +
+                  (int64_t)ru.ru_stime.tv_sec * 1000000 + ru.ru_stime.tv_usec;
+    int64_t wall = (int64_t)tv.tv_sec * 1000000 + tv.tv_usec;
+    int64_t dc = cpu - last_cpu_us, dw = wall - last_wall_us;
+    last_cpu_us = cpu;
+    last_wall_us = wall;
+    if (dw <= 0)
+        return 0;
+    float busy = 100.0f * (float)dc / (float)dw;
+    if (busy < 0.0f) busy = 0.0f;
+    if (busy > 100.0f) busy = 100.0f;
+    pct[0] = busy;
+    return 1;
+#else
+    (void)pct; (void)max;
+    return 0;
+#endif
 }
 
 bool surfer_port_screenshot(const char *path)
