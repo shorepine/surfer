@@ -341,6 +341,13 @@ typedef struct {
 
 #define surf_font_line_h(f) ((int16_t)((f)->ascent - (f)->descent + (f)->line_gap))
 
+/* Load a fontbake blob (the "SFN1" bytes it emits to a .py module) into
+ * a runtime font — pass it to surf_textgrid_new for a custom console
+ * font. Decoded at load time; free with surf_font_free after every
+ * textgrid using it is gone. */
+surf_font *surf_font_from_blob(const void *data, size_t len);
+void       surf_font_free(surf_font *f);
+
 typedef enum {
     SURF_ALIGN_LEFT   = 0,
     SURF_ALIGN_CENTER = 1,

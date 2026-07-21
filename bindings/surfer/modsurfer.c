@@ -107,6 +107,12 @@ typedef struct {
 } surfer_pad_obj_t;
 extern const mp_obj_type_t surfer_pad_type;
 
+typedef struct {
+    mp_obj_base_t base;
+    surf_font *font;    /* NULL after destroy() */
+} surfer_font_obj_t;
+extern const mp_obj_type_t surfer_font_type;
+
 enum { W_SLIDER, W_KNOB, W_CHECKBOX, W_DROPDOWN, W_BUTTON };
 
 typedef struct {
@@ -1273,15 +1279,85 @@ static mp_obj_t mod_label(size_t n_args, const mp_obj_t *args)
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_label_obj, 3, 5, mod_label);
 
+/* ---- Font (runtime textgrid font) ---- */
+
+static mp_obj_t font_destroy(mp_obj_t self_in)
+{
+    surfer_font_obj_t *o = MP_OBJ_TO_PTR(self_in);
+    if (o->font) {
+        surf_font_free(o->font);
+        o->font = NULL;
+    }
+    return mp_const_none;
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(font_destroy_obj, font_destroy);
+
+static const mp_rom_map_elem_t font_locals_table[] = {
+    {MP_ROM_QSTR(MP_QSTR_destroy), MP_ROM_PTR(&font_destroy_obj)},
+};
+static MP_DEFINE_CONST_DICT(font_locals_dict, font_locals_table);
+
+/* .cell_w (the 'M' advance) / .cell_h (line height) — the textgrid cell */
+static void font_attr(mp_obj_t self_in, qstr attr, mp_obj_t *dest)
+{
+    surfer_font_obj_t *o = MP_OBJ_TO_PTR(self_in);
+    if (dest[0] == MP_OBJ_NULL && o->font) {
+        if (attr == MP_QSTR_cell_h) {
+            dest[0] = MP_OBJ_NEW_SMALL_INT(surf_font_line_h(o->font));
+            return;
+        }
+        if (attr == MP_QSTR_cell_w) {
+            int adv = 0;
+            for (int32_t i = 0; i < o->font->nglyphs; i++)
+                if (o->font->glyphs[i].cp == 'M') adv = o->font->glyphs[i].adv;
+            dest[0] = MP_OBJ_NEW_SMALL_INT(adv);
+            return;
+        }
+    }
+    if (dest[0] == MP_OBJ_NULL)
+        dest[1] = MP_OBJ_SENTINEL;
+}
+
+MP_DEFINE_CONST_OBJ_TYPE(surfer_font_type, MP_QSTR_Font, MP_TYPE_FLAG_NONE,
+                         attr, font_attr, locals_dict, &font_locals_dict);
+
+/* surfer.font(blob_bytes) -> Font. blob is a fontbake .py FONT value
+ * (the "SFN1" format). Pass it to surfer.textgrid(..., font=f) for a
+ * custom console font. Held alive by the grid + a GC root. */
+static mp_obj_t mod_font(mp_obj_t data_in)
+{
+    mp_buffer_info_t buf;
+    mp_get_buffer_raise(data_in, &buf, MP_BUFFER_READ);
+    surf_font *f = surf_font_from_blob(buf.buf, buf.len);
+    if (!f)
+        mp_raise_ValueError(MP_ERROR_TEXT("bad font blob"));
+    surfer_port_prepare_image(&f->atlas);   /* device DMA coherence */
+    surfer_font_obj_t *o = mp_obj_malloc(surfer_font_obj_t, &surfer_font_type);
+    o->font = f;
+    registry_add(MP_OBJ_FROM_PTR(o));
+    return MP_OBJ_FROM_PTR(o);
+}
+static MP_DEFINE_CONST_FUN_OBJ_1(mod_font_obj, mod_font);
+
 static mp_obj_t mod_textgrid(size_t n_args, const mp_obj_t *args)
 {
     surf_color fg = n_args > 2 ? (surf_color)mp_obj_get_int(args[2])
                                : SURF_RGB(200, 205, 215);
     surf_color bg = n_args > 3 ? (surf_color)mp_obj_get_int(args[3])
                                : SURF_RGB(18, 20, 25);
-    const surf_font *f = font_of(n_args > 4 ? mp_obj_get_int(args[4]) : 2);
-    return MP_OBJ_FROM_PTR(new_node_obj(surf_textgrid_new(
-        f, mp_obj_get_int(args[0]), mp_obj_get_int(args[1]), fg, bg)));
+    const surf_font *f;
+    mp_obj_t font_ref = mp_const_none;
+    if (n_args > 4 && mp_obj_is_type(args[4], &surfer_font_type)) {
+        f = ((surfer_font_obj_t *)MP_OBJ_TO_PTR(args[4]))->font;
+        font_ref = args[4];             /* anchor the runtime font */
+    } else {
+        f = font_of(n_args > 4 ? mp_obj_get_int(args[4]) : 2);
+    }
+    surfer_node_obj_t *o = new_node_obj(surf_textgrid_new(
+        f, mp_obj_get_int(args[0]), mp_obj_get_int(args[1]), fg, bg));
+    if (o)
+        o->img_ref = font_ref;
+    return MP_OBJ_FROM_PTR(o);
 }
 static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_textgrid_obj, 2, 5, mod_textgrid);
 
@@ -1461,6 +1537,7 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_sprite), MP_ROM_PTR(&mod_sprite_obj)},
     {MP_ROM_QSTR(MP_QSTR_label), MP_ROM_PTR(&mod_label_obj)},
     {MP_ROM_QSTR(MP_QSTR_textgrid), MP_ROM_PTR(&mod_textgrid_obj)},
+    {MP_ROM_QSTR(MP_QSTR_font), MP_ROM_PTR(&mod_font_obj)},
     {MP_ROM_QSTR(MP_QSTR_scrollview), MP_ROM_PTR(&mod_scrollview_obj)},
     {MP_ROM_QSTR(MP_QSTR_slider), MP_ROM_PTR(&mod_slider_obj)},
     {MP_ROM_QSTR(MP_QSTR_knob), MP_ROM_PTR(&mod_knob_obj)},
