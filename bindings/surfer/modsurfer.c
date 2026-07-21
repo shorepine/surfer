@@ -1102,7 +1102,11 @@ static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
     if (inited) {
         /* soft reset (or repeat init): the VM dropped every Python object,
          * so rebuild the C scene from scratch on the surviving hal —
-         * stale nodes with dangling callbacks must not outlive the VM */
+         * stale nodes with dangling callbacks must not outlive the VM.
+         * The registry list died with the old heap; drop the root pointer
+         * so registry_add rebuilds it instead of appending into freed
+         * memory (store fault on the first node after Ctrl-D otherwise). */
+        MP_STATE_VM(surfer_registry) = MP_OBJ_NULL;
         surf_deinit();
         g_scr_w = w;
         g_scr_h = h;
