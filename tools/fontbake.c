@@ -88,12 +88,18 @@ int main(int argc, char **argv)
         stbtt_PackEnd(&pctx);
         if (ok)
             break;
-        if (ah < aw) ah *= 2; else aw *= 2;
+        if (ah < aw) ah *= 2; else aw *= 2;   /* grow atlas, retry */
         if (aw > 4096) {
             fprintf(stderr, "fontbake: atlas won't fit\n");
             return 1;
         }
     }
+
+    /* FONTBAKE_THRESHOLD=1 -> 1-bit atlas (no antialiasing): crisp
+     * bitmap-font look, every pixel fully on or off. */
+    if (getenv("FONTBAKE_THRESHOLD"))
+        for (int j = 0; j < aw * ah; j++)
+            atlas[j] = atlas[j] >= 128 ? 255 : 0;
 
     float scale = stbtt_ScaleForPixelHeight(&info, size);
     int ascent, descent, gap;
@@ -149,7 +155,12 @@ int main(int argc, char **argv)
     fprintf(out, "    .kerns = surf_font_%s_kerns, .nkerns = %d,\n", name, nkern);
     fprintf(out, "};\n");
 
-    fprintf(stderr, "fontbake: %s %.1fpx → %dx%d atlas, %d glyphs, %d kern pairs\n",
-            name, size, aw, ah, ncps, nkern);
+    int m_idx = -1;
+    for (int i = 0; i < ncps; i++) if (cps[i] == 'M') m_idx = i;
+    int m_adv = m_idx >= 0 ? (int)(pc[m_idx].xadvance + 0.5f) : 0;
+    int line_h = (int)(ascent * scale + 0.5f) - (int)(descent * scale - 0.5f)
+                 + (int)(gap * scale + 0.5f);
+    fprintf(stderr, "fontbake: %s %.1fpx → %dx%d atlas, %d glyphs, cell %dx%d (M adv x line_h)\n",
+            name, size, aw, ah, ncps, m_adv, line_h);
     return 0;
 }
