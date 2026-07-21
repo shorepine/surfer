@@ -42,7 +42,7 @@
     Module.ccall("surfer_web_run", "null", ["string"], [src]);
   if (!new URLSearchParams(location.search).has("probe")) {
     // boot: tulip.py sets up and returns without looping on webassembly
-    run("import tulip");
+    run("import repl");
     status.textContent = "";
     canvas.focus();
     // arm BOTH rAF and a fallback timeout, first to fire wins: rAF for
@@ -53,7 +53,7 @@
     const step = () => {
       cancelAnimationFrame(rafId);
       clearTimeout(toId);
-      run("tulip.frame()");
+      run("repl.frame()");
       schedule();
     };
     const schedule = () => {

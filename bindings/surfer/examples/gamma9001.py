@@ -465,8 +465,8 @@ def main():
         # frame driver calls the hook once per frame instead. (tulip's
         # REPL keeps draining the keyboard first — the on-glass REPL
         # stays live over the app, unlike the desktop takeover.)
-        import tulip
-        tulip.app_frame = _step
+        import repl
+        repl.app_frame = _step
         return
 
     while surfer.tick():

@@ -58,8 +58,8 @@ def main():
 
     import sys
     if sys.platform == "webassembly":
-        import tulip
-        tulip.app_frame = _step
+        import repl
+        repl.app_frame = _step
         return
     while surfer.tick():
         _step()
