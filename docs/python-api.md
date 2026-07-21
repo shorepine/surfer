@@ -8,10 +8,10 @@ the unix port; the esp32p4 port will expose the same API.
 
 ```sh
 make mpy      # builds MicroPython (MPY_DIR ?= ~/micropython) with the surfer module
-~/micropython/ports/unix/build-standard/micropython bindings/surfer/tulip.py
+~/micropython/ports/unix/build-standard/micropython bindings/surfer/repl.py
 ```
 
-`tulip.py` boots "tulip mode": an on-screen REPL with `surfer` and
+`repl.py` boots an on-screen REPL with `surfer` and
 `screen` already in scope. Everything below can be typed at it live.
 
 ## The module
@@ -176,7 +176,7 @@ pixels that are still on screen. Sprite-sheet sub-rect animation
 isn’t exposed yet.
 
 The full demo is [examples/space.py](../bindings/surfer/examples/space.py)
-(`import space` from tulip mode): draggable ship, tumbling meteors at
+(`import space` from the REPL): draggable ship, tumbling meteors at
 mixed scales, autofiring lasers — Kenney CC0 art from
 [assets/kenney/](../assets/kenney/).
 
@@ -189,7 +189,34 @@ the frame path pays one blit per layer instead of one per tile:
 ```python
 strip = surfer.image_new(2048, 128)          # opaque; alpha=True for ARGB
 strip.fill(surfer.rgb(92, 148, 218))         # also: fill(c, x, y, w, h)
-### Shapes — draw the asset, then sprite it
+tile = surfer.image(open("grass.png", "rb").read())
+for x in range(0, 2048, 64):
+    strip.blit(tile, x, 0)                   # load-time composition (CPU)
+tile.destroy()
+
+l = surfer.layer(strip, 0, y, 1024)          # strip, x, y, on-screen width
+screen.add(l)
+l.fast_scroll(True)
+l.set_offset(px)                             # float pixels; wraps at strip.w
+```
+
+`set_offset` wraps automatically — no two-sprite tricks. With
+`fast_scroll(True)` (needs an opaque strip; on the P4, triple-buffer
+mode) per-frame motion becomes one DMA band copy plus a sliver repaint
+instead of a full recompose: measured on the P4, a full-screen
+three-layer parallax scene is **19 fps naive vs 63–65 fps with fast
+layers**. Rules: fast layers must not overlap each other (stack them in
+disjoint horizontal bands), and anything drawn on top of a fast layer
+(the player sprite) must be a LATER SIBLING in the same parent — the
+layer damages overlays as it shifts. Sub-pixel offsets are free; a
+layer that stops moving repaints its band once.
+
+The full demo is
+[examples/parallax.py](../bindings/surfer/examples/parallax.py)
+(`import parallax` from the REPL): sky, mountains and ground bands at
+0.1x/0.5x/1x with a bobbing ship, printing fps once a second.
+
+## Shapes — draw the asset, then sprite it
 
 All shape calls rasterize INTO an image at load time (anti-aliased,
 never per frame). Paints are an rgb565 int, `(color, alpha)`, or a
@@ -220,33 +247,6 @@ polys (no art), and the volcanoes' lava veins are bezier strokes in A8
 masks with cycling tints. Keep tint-cycled overlay masks CROPPED to
 their ink when they ride a fast-scrolling layer — a moving overlay
 re-blends its whole bbox every frame (DESIGN.md §5).
-
-tile = surfer.image(open("grass.png", "rb").read())
-for x in range(0, 2048, 64):
-    strip.blit(tile, x, 0)                   # load-time composition (CPU)
-tile.destroy()
-
-l = surfer.layer(strip, 0, y, 1024)          # strip, x, y, on-screen width
-screen.add(l)
-l.fast_scroll(True)
-l.set_offset(px)                             # float pixels; wraps at strip.w
-```
-
-`set_offset` wraps automatically — no two-sprite tricks. With
-`fast_scroll(True)` (needs an opaque strip; on the P4, triple-buffer
-mode) per-frame motion becomes one DMA band copy plus a sliver repaint
-instead of a full recompose: measured on the P4, a full-screen
-three-layer parallax scene is **19 fps naive vs 63–65 fps with fast
-layers**. Rules: fast layers must not overlap each other (stack them in
-disjoint horizontal bands), and anything drawn on top of a fast layer
-(the player sprite) must be a LATER SIBLING in the same parent — the
-layer damages overlays as it shifts. Sub-pixel offsets are free; a
-layer that stops moving repaints its band once.
-
-The full demo is
-[examples/parallax.py](../bindings/surfer/examples/parallax.py)
-(`import parallax` from tulip mode): sky, mountains and ground bands at
-0.1x/0.5x/1x with a bobbing ship, printing fps once a second.
 
 ## Widgets
 
@@ -376,9 +376,10 @@ call `keys()` once per frame anyway to drain the event queue.
 Key events from `surfer.keys()` are `(kind, text, shift)`; `text` holds
 the typed characters when `kind == KEY_TEXT`, else `""`.
 
-## tulip.py helpers
+## repl.py helpers
 
-`bindings/surfer/tulip.py` layers a tulipcc-style shell on top:
+`bindings/surfer/repl.py` layers a tulipcc-style shell on top (tulip5's
+`tulip.py` builds on this):
 
 - **`UIScreen`** — holds live UI objects. `screen.add(el, x=None, y=None)`
   positions and parents in one call and returns `el`; `screen.remove(el)`;
