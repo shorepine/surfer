@@ -49,9 +49,9 @@ blocking loop would freeze the tab: the browser drives one frame per
 hook instead of looping:
 
 ```python
-import sys, tulip
+import sys, repl
 if sys.platform == "webassembly":
-    tulip.app_frame = my_step      # called once per frame after the REPL;
+    repl.app_frame = my_step       # called once per frame after the REPL;
 else:                              # return False to unhook
     while surfer.tick():
         if my_step() is False:
@@ -364,7 +364,8 @@ pad.reset()                                        # neutral (unplugged)
 Each `set_*` replaces the whole field, which is what a driver holding a
 full HID report wants; a keyboard mapper assembles the bits then calls
 once. (Hardware drivers — USB HID parsing, i2c polling — live above
-surfer, in the port / tulip5; surfer owns only this abstract layer.)
+surfer, in the port / host layer; surfer owns only this abstract
+layer.)
 
 `surfer.keys_held()` returns the keys currently held down — state, not
 events, up to 8 at once. Poll it every frame for game controls: it has
@@ -378,8 +379,7 @@ the typed characters when `kind == KEY_TEXT`, else `""`.
 
 ## repl.py helpers
 
-`bindings/surfer/repl.py` layers a tulipcc-style shell on top (tulip5's
-`tulip.py` builds on this):
+`bindings/surfer/repl.py` layers a REPL shell on top:
 
 - **`UIScreen`** — holds live UI objects. `screen.add(el, x=None, y=None)`
   positions and parents in one call and returns `el`; `screen.remove(el)`;

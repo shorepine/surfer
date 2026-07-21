@@ -6,13 +6,13 @@ surfer is a small retained-mode UI compositor: C11 core, backends for the
 ESP32-P4 (MIPI DSI + PPA), desktop (SDL2), and web (emscripten).
 It is meant to be set up at runtime in Python or Micropython on MCUs, the web or desktop.
 
-Our goal is to get 60FPS iOS-style low latency widget control at large resolutions on an MCU. It's being considered as the next generation UI for [Tulip](https://tulip.computer).
+Our goal is to get 60FPS iOS-style low latency widget control at large resolutions on an MCU.
 
 > ⚠️ **Early days.** This is an architecture experiment with working code and
 > real measurements, not a finished library. The API will change. We're
 > through M7 of the milestone plan in [DESIGN.md](DESIGN.md) — which is
 > the source of truth for how everything works and why. All three
-> backends run the same MicroPython "tulip mode": on the P4's panel, in
+> backends run the same MicroPython "repl mode": on the P4's panel, in
 > an SDL window, and in a browser canvas.
 
 ![the mixer demo: 6 knobs + 6 sliders with labels](docs/mixer.png)
@@ -35,9 +35,9 @@ in core ticks) with checkboxes, sliders, and a dropdown whose popup
 overlays via detach/reattach. Scrolling steals taps after an 8px
 threshold; slider and knob drags are never stolen.*
 
-![tulip mode: a MicroPython REPL on screen with live widgets](docs/tulip.png)
+![repl mode: a MicroPython REPL on screen with live widgets](docs/repl.png)
 
-*M5, "tulip mode": a MicroPython REPL rendered into a surfer textgrid,
+*M5, "repl mode": a MicroPython REPL rendered into a surfer textgrid,
 with widgets created live from typed Python — `s = surfer.slider(x, y)`,
 `screen.add(s)`, `s.callback = fn`. Hand-written binding, unix port.
 The Python API is documented in [docs/python-api.md](docs/python-api.md).*
@@ -58,7 +58,7 @@ control panels behind a button (detach/reattach). No audio yet.*
 channel, `.scale` (1/16–16×) and `.rot` (quarter turns — the P4 PPA's
 SRM limit). Moving one repaints only what it uncovers, like any node.
 [examples/space.py](bindings/surfer/examples/space.py), Kenney CC0 art;
-`import space` from tulip mode on any backend. On the P4 a transformed
+`import space` from repl mode on any backend. On the P4 a transformed
 sprite is two PPA ops (SRM + blend); desktop and web use a software
 inverse-map in the hal.*
 
@@ -72,7 +72,7 @@ rocks and tree trunks blocking everyone. Every sprite was found by
 grepping [assets/kenney/lib/index.tsv](assets/kenney/lib/) descriptions
 — 39k CC0 Kenney sprites indexed as `path → description → size` so a
 program (or an LLM) can pick art without looking at pixels. `import
-forest` from tulip mode.*
+forest` from repl mode.*
 
 ## The idea
 
@@ -127,9 +127,9 @@ from the built-in benchmark and the 6-knobs + 6-sliders demo:
 
 | platform | status | notes |
 |---|---|---|
-| **ESP32-P4** (MIPI DSI + PPA) | working | the primary target — 60 fps widgets under finger, 91 fps text scroll; MicroPython "tulip mode" verified on hardware (on-screen REPL + USB keyboard) |
+| **ESP32-P4** (MIPI DSI + PPA) | working | the primary target — 60 fps widgets under finger, 91 fps text scroll; MicroPython "repl mode" verified on hardware (on-screen REPL + USB keyboard) |
 | **Desktop** (SDL2, macOS/Linux) | working | the iteration loop; also hosts the MicroPython unix build |
-| **Web** (emscripten canvas) | working | the SDL hal compiled with emscripten. C demos via ASYNCIFY; tulip mode runs MicroPython's webassembly port with **no** ASYNCIFY — the browser drives frames (`tulip.frame()` per rAF) and the VM never suspends |
+| **Web** (emscripten canvas) | working | the SDL hal compiled with emscripten. C demos via ASYNCIFY; repl mode runs MicroPython's webassembly port with **no** ASYNCIFY — the browser drives frames (`repl.frame()` per rAF) and the VM never suspends |
 | **RP2350** (HSTX DVI, e.g. Fruit Jam) | researched | no blitter but a good CPU-compositing fit at 320×240/400×240 RGB565 — [notes here](docs/rp2350-notes.md) |
 | **ESP32-S3** (parallel RGB, tulipcc today) | researched | standalone port not worth it at 1024×600; the good path is surfer-as-widget-layer inside tulipcc's engine — [notes here](docs/esp32s3-notes.md) |
 
@@ -142,8 +142,7 @@ src/text/               baked-atlas text: label, textinput, textgrid
 src/widgets/            knob, slider, button, checkbox, dropdown
 src/hal/sdl/            desktop + web backend (per-pixel code lives only here)
 src/hal/p4/             ESP32-P4 backend: PPA, DSI flips, DMA2D, GT911 touch
-bindings/surfer/        MicroPython binding, tulip.py, examples/, web variant,
-                        SURFER_P4 board def
+bindings/surfer/        MicroPython binding, repl.py, examples/, web variant
 ports/esp32p4/          native ESP-IDF project (benchmark + C demo)
 tools/                  asset bakers (fontbake, pngwrap), vendored stb
 assets/                 fonts + demo art (Kenney CC0 under assets/kenney/)
@@ -163,15 +162,14 @@ Web (needs emscripten):
 
 ```
 make web                           # C demos → build/web/{mixer,settings}.html
-make mpy-web MPY_DIR=...           # tulip mode → build/web/index.html
+make mpy-web MPY_DIR=...           # repl mode → build/web/index.html
 ```
 
-Device (MicroPython tulip mode — micropython ≥ 1.28 + IDF 5.5.1):
-
-```
-make mpy-p4 && make mpy-p4-flash PORT=<port>
-# then at the serial REPL: import tulip  (import space / import gamma9001 on the glass)
-```
+Device (MicroPython, micropython ≥ 1.28 + IDF 5.5.1): surfer builds as a
+MicroPython user C module for the esp32 port — a consuming project's board
+build includes it (see `bindings/surfer/micropython.cmake`) and boots
+`repl.py` or its own app on the panel, with `import space` / `import
+gamma9001` live on the glass.
 
 Native device firmware (benchmark + mixer demo, IDF ≥ 5.4):
 
@@ -187,15 +185,15 @@ idf.py -p <port> flash monitor
 - [x] M2 — P4 backend: PPA, DSI, buffering benchmark, 60 fps under finger
 - [x] M3 — text: baked font atlases, label, wrap, textinput + caret
 - [x] M4 — scrollview + momentum, checkbox, dropdown
-- [x] M5 — MicroPython bindings; tulip mode on unix and on P4 hardware
+- [x] M5 — MicroPython bindings; repl mode on unix and on P4 hardware
       (on-glass REPL, USB keyboard, gamma9001)
-- [x] M6 — web build: C demos (emscripten+SDL2) and tulip mode in a
+- [x] M6 — web build: C demos (emscripten+SDL2) and repl mode in a
       canvas (MP webassembly port, browser-driven frames, no ASYNCIFY)
 - [x] M7 — sprites: runtime PNG loading from Python, any size, alpha,
       scale + quarter-turn rotation (PPA SRM on device)
 - [ ] M8 — real art pass, default theme
 - [ ] later — sprite sub-rect animation, on-screen keyboard widget,
-      audio hooks (AMY), app switcher (the tulip5 OS layer)
+      audio hooks, app switcher (an OS layer above surfer)
 
 ## License
 

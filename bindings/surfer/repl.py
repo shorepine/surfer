@@ -1,7 +1,7 @@
-# tulip mode: an on-screen MicroPython REPL rendered into a surfer
-# textgrid, plus a tulipcc-flavored UIScreen. Run with the unix port:
+# repl mode: an on-screen MicroPython REPL rendered into a surfer
+# textgrid, plus a UIScreen. Run with the unix port:
 #
-#   ~/micropython/ports/unix/build-standard/micropython bindings/micropython/tulip.py
+#   ~/micropython/ports/unix/build-standard/micropython bindings/surfer/repl.py
 #
 # Then, live on the glass:
 #   >>> s = surfer.slider(700, 120)
@@ -22,7 +22,7 @@ app_frame = None
 
 
 class UIScreen:
-    """Holds the live UI objects, tulipcc-style. add() parents anything
+    """Holds the live UI objects. add() parents anything
     (widget or node) into this screen's group; the group detaches whole
     for app switching."""
 
@@ -107,7 +107,7 @@ class Repl:
         self.history = []
         self.hist_i = 0
         self.pending = []  # continuation lines
-        self.c.write("surfer %dx%d — tulip mode. objects: surfer, screen\n" % (W, H))
+        self.c.write("surfer %dx%d — repl mode. objects: surfer, screen\n" % (W, H))
         self._prompt()
 
     def _print(self, *args, **kw):
@@ -195,11 +195,11 @@ def main():
     cell.destroy()
 
     # module globals: app/hosts (and the web shell) reach these as
-    # tulip.console / tulip.screen / tulip.repl
+    # the module's console / screen / repl
     global console, screen, repl
     console = Console(cols, rows)
 
-    # UI layer sits in front of the console text, tulip-style
+    # UI layer sits in front of the console text
     screen = UIScreen()
 
     ns = {"surfer": surfer, "screen": screen, "console": console}
@@ -212,7 +212,7 @@ def main():
     state = {"frames": 0}
 
     def _frame():
-        """One tick of tulip mode; False when the host wants to quit."""
+        """One tick of repl mode; False when the host wants to quit."""
         global app_frame
         if not surfer.tick():
             return False
@@ -234,7 +234,7 @@ def main():
 
     import sys
     if sys.platform == "webassembly":
-        # the browser owns the loop: index.html calls tulip.frame() per
+        # the browser owns the loop: index.html calls repl.frame() per
         # requestAnimationFrame. Looping here would suspend the VM inside
         # this module's import, which wedges ASYNCIFY (see surfer's
         # bindings/surfer/web/hal_sdl_web.c).

@@ -1,6 +1,6 @@
 # The sprite demo: runtime PNGs (Kenney "Space Shooter Redux", CC0)
 # moving, scaling, and quarter-turn rotating over the live UI. Run from
-# tulip mode with `import space`; the compositor repaints whatever the
+# repl mode with `import space`; the compositor repaints whatever the
 # sprites uncover — no manual redraw of the background.
 #
 # Ship follows a touch/drag; meteors tumble and wrap; lasers fire on tap.

@@ -1,4 +1,4 @@
-# surfer "web" variant of micropython's webassembly port: tulip mode in a
+# surfer "web" variant of micropython's webassembly port: repl mode in a
 # canvas. Build via `make mpy-web` from the surfer repo root — it needs
 # build/libsurfer-web.a and the generated asset headers first.
 # read by bindings/surfer/micropython.mk to pick the emscripten branch —

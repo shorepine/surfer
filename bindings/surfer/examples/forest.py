@@ -13,7 +13,7 @@
 # sprites layered after the camera; it damages them as it pans.
 #
 # Art from the Kenney CC0 library, frozen into forest_assets.py for
-# P4/web. Run from tulip mode: import forest
+# P4/web. Run from repl mode: import forest
 import time
 
 import surfer

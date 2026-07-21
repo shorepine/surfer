@@ -1,7 +1,7 @@
 # Controller tester: shows surfer.pad(0) live on screen. Plug in a USB
 # gamepad (or use the keyboard map: arrows/WASD + space/ZXCV) and every
 # button lights up, both sticks track. Use it to confirm a new driver's
-# mapping. Run from tulip mode: import padtest
+# mapping. Run from repl mode: import padtest
 import time
 
 import surfer

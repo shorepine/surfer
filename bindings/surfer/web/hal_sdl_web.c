@@ -1,8 +1,8 @@
 /* The sdl hal compiled as a usermod TU for the webassembly port, with
  * the ASYNCIFY frame yield compiled OUT: an ASYNCIFY suspend inside
- * MP's import machinery wedges the VM (`import tulip` never comes
+ * MP's import machinery wedges the VM (`import repl` never comes
  * back), so on the MP web build the browser drives frames from JS
- * (index.html's rAF loop → tulip.frame()) and every call into the VM
+ * (index.html's rAF loop → repl.frame()) and every call into the VM
  * stays synchronous. Also keeps hal_sdl.c out of libsurfer-web.a for
  * this build — emscripten drops EM_JS bodies that arrive via a static
  * archive. */

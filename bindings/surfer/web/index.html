@@ -1,13 +1,13 @@
 <!doctype html>
-<!-- tulip mode in a canvas. Serve the build directory and open this file;
+<!-- repl mode in a canvas. Serve the build directory and open this file;
      it expects micropython.mjs + micropython.wasm next to it.
-     Everything is synchronous: `import tulip` sets up and returns
-     (tulip.py skips its loop on webassembly), then the rAF loop below
-     drives one tulip.frame() per animation frame. -->
+     Everything is synchronous: `import repl` sets up and returns
+     (repl.py skips its loop on webassembly), then the rAF loop below
+     drives one repl.frame() per animation frame. -->
 <html>
 <head>
 <meta charset="utf-8">
-<title>surfer — tulip mode</title>
+<title>surfer — repl mode</title>
 <style>
   html, body { margin: 0; background: #12141a; height: 100%; }
   body { display: flex; align-items: center; justify-content: center; }
@@ -34,14 +34,14 @@
     printErr: (t) => console.warn(t),
   });
   // minimal runtime init, matching what api.js's loadMicroPython does
-  // (we skip the JS-proxy layer: tulip mode lives on the canvas).
+  // (we skip the JS-proxy layer: repl mode lives on the canvas).
   Module.ccall("mp_js_init", "null", ["number", "number"],
                [2 * 1024, 64 * 1024 * 1024]);
   window.Module = Module;  // debug access from the console
   const run = (src) =>
     Module.ccall("surfer_web_run", "null", ["string"], [src]);
   if (!new URLSearchParams(location.search).has("probe")) {
-    // boot: tulip.py sets up and returns without looping on webassembly
+    // boot: repl.py sets up and returns without looping on webassembly
     run("import repl");
     status.textContent = "";
     canvas.focus();

@@ -47,7 +47,7 @@ The M2/M5 measurements flip in surfer's favor here:
 
 ## The gotchas (what makes it less useful)
 
-1. **Resolution ceiling.** 320×240 or 400×240 logical. Not a Tulip-class
+1. **Resolution ceiling.** 320×240 or 400×240 logical. Not a large-panel
    1024×600 canvas; UIs need QVGA-density layouts (Gamma 9001 as built
    would need a full re-layout, fewer visible steps/knobs). This is the
    real limitation.
@@ -70,7 +70,7 @@ The M2/M5 measurements flip in surfer's favor here:
 
 ## Recommendation
 
-Worth doing, after current priorities (AMY hookup, on-device tulip
+Worth doing, after current priorities (AMY hookup, on-device repl
 verify, M6): roughly 1–2 focused sessions to first light given how much
 is reused. Target: Fruit Jam, 400×240 RGB565 pixel-doubled, single
 buffer first. Prep step that pays for itself immediately: factor the

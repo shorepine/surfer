@@ -6,7 +6,7 @@
 #
 # The scene: a glowing spaceship breathing through the spectrum, a ring
 # of slimes running a marquee chase around it, and a treeline slowly
-# sweeping through sunset hues. Run from tulip mode: import pulse
+# sweeping through sunset hues. Run from repl mode: import pulse
 import math
 import time
 

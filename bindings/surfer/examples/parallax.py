@@ -19,7 +19,7 @@
 # an overlay sprite whose .tint cycles through ember colors per frame —
 # Amiga-style color cycling, one hardware blend per volcano.
 #
-# Run from tulip mode: import parallax   (desktop, P4, or web)
+# Run from repl mode: import parallax   (desktop, P4, or web)
 import math
 import time
 

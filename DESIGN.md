@@ -1,6 +1,6 @@
 # surfer — design
 
-A small retained-mode UI compositor for Tulip's next generation. Replaces LVGL.
+A small retained-mode UI compositor for MCUs and framebuffers. Replaces LVGL.
 Targets: ESP32-P4 (rev 3) over MIPI DSI, desktop via SDL2, web via emscripten+SDL2.
 Core in C11. Scripted from MicroPython (device) and CPython (desktop, later).
 
@@ -98,7 +98,7 @@ entire invalidation model.
 reattach losslessly. `node.detach()` removes a subtree from the render tree but
 keeps it fully alive — state, children, everything. `parent.add(node)` puts it
 back. This is the multitasking primitive: an app's whole UI is one group that
-Tulip's switcher detaches and re-attaches. No serialize/deserialize needed for
+the host's app switcher detaches and re-attaches. No serialize/deserialize needed for
 the common case; a save-to-disk form can come later if ever needed.
 
 ### 2.3 Render loop
@@ -129,8 +129,8 @@ synchronized against the tear-effect line. Decide with a benchmark, not vibes
 - Knobs are filmstrips (e.g. 128 frames, rendered from Blender — actual raked
   metal, real shadows). Sliders are 9-slice tracks + a cap sprite. States
   (pressed/disabled/checked) are just other frames/images.
-- Default theme ships in the firmware image; user themes load from Tulip's
-  filesystem at runtime.
+- Default theme ships in the firmware image; user themes load from the
+  host filesystem at runtime.
 
 ### 2.5 Text (the hard part — decisions pinned here)
 
@@ -170,7 +170,7 @@ GAMES read it, and neither knows the other. The boundary this draws:
 the abstract controller API is surfer's (any surfer app wants to read a
 gamepad without caring about the bus), but the DRIVERS that fill it —
 USB HID report parsing, i2c gamepad polling — are platform code and
-live above surfer, in the port layer / tulip5. The one source surfer
+live above surfer, in the port / application layer. The one source surfer
 ships itself is the keyboard map (in the binding, since key state comes
 through the port): arrows/WASD -> dpad, letter keys -> buttons, run each
 tick. A game reading a pad works on the keyboard immediately and gains
@@ -222,7 +222,7 @@ surfer.screen().add(ui)  # and it's back
 ```
 
 Callbacks fire from the surfer tick into MicroPython on the same task —
-no cross-task marshaling in v1; Tulip already runs MP on a known core/task and
+no cross-task marshaling in v1; the host already runs MP on a known core/task and
 the render tick will live there too. (If profiling later says rendering wants
 its own task, only `present`/PPA waits move, not callbacks.)
 
@@ -291,7 +291,7 @@ its own task, only `present`/PPA waits move, not callbacks.)
 
    **Measured sprite limits on hardware** (ESP32-P4-Function-EV-Board,
    1024×600, IDF 5.5.1, MicroPython-driven — 2–3 property writes per
-   sprite per frame included, i.e. the honest tulip-app numbers; 100-frame
+   sprite per frame included, i.e. the honest app numbers; 100-frame
    sweeps of independently moving ARGB8888 sprites):
 
    | scenario | 60 fps ceiling | marginal cost/sprite |

@@ -1,6 +1,6 @@
 /* Web entry point: exec a python string from JS, synchronously. The
  * port's mp_js_do_exec additionally converts its result through the JS
- * proxy layer, which we don't initialize — tulip mode lives on the
+ * proxy layer, which we don't initialize — repl mode lives on the
  * canvas, not in JS objects. Participates in the port's deferred-GC
  * protocol: with MICROPY_GC_SPLIT_HEAP_AUTO the collector only sets a
  * pending flag, and the real collection runs when the external call

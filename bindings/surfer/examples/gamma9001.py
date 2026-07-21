@@ -335,7 +335,7 @@ def main():
     page2.add(surfer.label("UI test build - no audio.\n"
                            "tap a value to reset it.", px + 16, 210, C_DIM))
 
-    # ---------------- page switching (detach/reattach, tulip-style)
+    # ---------------- page switching (detach/reattach)
     current = ["pattern"]
 
     def show_page(which):
@@ -461,8 +461,8 @@ def main():
     import sys
     if sys.platform == "webassembly":
         # never loop here: on web this import runs inside the browser's
-        # frame callback and a blocking loop freezes the tab. tulip's
-        # frame driver calls the hook once per frame instead. (tulip's
+        # frame callback and a blocking loop freezes the tab. the repl's
+        # frame driver calls the hook once per frame instead. (its
         # REPL keeps draining the keyboard first — the on-glass REPL
         # stays live over the app, unlike the desktop takeover.)
         import repl
