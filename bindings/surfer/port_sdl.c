@@ -1,9 +1,11 @@
-/* Desktop (unix port) platform glue: SDL hal + SDL keyboard. */
+/* Desktop (unix port) platform glue: SDL hal + SDL keyboard + gamepad. */
 #include <string.h>
 #ifndef __EMSCRIPTEN__
 #include <sys/resource.h>
 #include <sys/time.h>
 #endif
+
+#include <SDL.h>
 
 #include "surfer_port.h"
 #include "hal_sdl.h"
@@ -11,7 +13,57 @@
 const surf_hal *surfer_port_init(int16_t w, int16_t h, bool single_buffer)
 {
     (void)single_buffer;  /* SDL owns presentation; nothing to choose */
-    return surf_hal_sdl_init(w, h, "surfer");
+    const surf_hal *hal = surf_hal_sdl_init(w, h, "surfer");
+    /* the desktop's gamepad "driver": SDL's game-controller API feeds the
+     * same abstract pad the device's USB driver does */
+    SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
+    return hal;
+}
+
+/* read the first attached SDL game controller into pad 0 (source 0),
+ * matching the device XInput mapping. Opened lazily; SDL keeps its state
+ * current from the events the hal pump already drains. */
+static void sdl_pad_pump(void)
+{
+    static SDL_GameController *ctrl;
+    if (ctrl && !SDL_GameControllerGetAttached(ctrl)) {
+        SDL_GameControllerClose(ctrl);
+        ctrl = NULL;
+        surf_pad_reset(0);
+    }
+    if (!ctrl) {
+        for (int i = 0; i < SDL_NumJoysticks(); i++) {
+            if (SDL_IsGameController(i)) {
+                ctrl = SDL_GameControllerOpen(i);
+                break;
+            }
+        }
+        if (!ctrl)
+            return;
+    }
+    SDL_GameController *c = ctrl;
+    uint8_t dpad = 0;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_DPAD_UP))    dpad |= SURF_DPAD_UP;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_DPAD_DOWN))  dpad |= SURF_DPAD_DOWN;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_DPAD_LEFT))  dpad |= SURF_DPAD_LEFT;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_DPAD_RIGHT)) dpad |= SURF_DPAD_RIGHT;
+    uint16_t btn = 0;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_A)) btn |= SURF_BTN_A;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_B)) btn |= SURF_BTN_B;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_X)) btn |= SURF_BTN_X;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_Y)) btn |= SURF_BTN_Y;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_LEFTSHOULDER))  btn |= SURF_BTN_L;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_RIGHTSHOULDER)) btn |= SURF_BTN_R;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_START)) btn |= SURF_BTN_START;
+    if (SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_BACK))  btn |= SURF_BTN_SELECT;
+    surf_pad_set_dpad(0, dpad);
+    surf_pad_set_buttons(0, btn);
+    /* SDL axes: int16, up/left negative — already the screen convention,
+     * so no inversion (x2 scales to Q16) */
+    surf_pad_set_axis(0, 0, 0, SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTX) * 2);
+    surf_pad_set_axis(0, 0, 1, SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTY) * 2);
+    surf_pad_set_axis(0, 1, 0, SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_RIGHTX) * 2);
+    surf_pad_set_axis(0, 1, 1, SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_RIGHTY) * 2);
 }
 
 /* The desktop's "input driver": each pump, drain SDL key events and
@@ -35,6 +87,7 @@ bool surfer_port_pump(void)
         memcpy(held[i].utf8, h[i].utf8, sizeof held[i].utf8);
     }
     surf_key_set_held(held, n);
+    sdl_pad_pump();   /* SDL gamepad -> pad 0 (source 0); keyboard is source 1 */
     return ok;
 }
 
