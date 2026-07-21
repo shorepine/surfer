@@ -218,19 +218,27 @@ def main():
     auto = getattr(builtins, "FOREST_AUTOWALK", False)
     auto_dir = [3, 0]
 
+    # one controller: a USB joystick and the keyboard (arrows/WASD, mapped
+    # to the dpad) both feed pad 0, so either walks the elf. Held state /
+    # analog read each frame — no key-repeat needed.
+    pad = surfer.pad(0)
+
     def _step():
         f = state["frames"] = state["frames"] + 1
 
         moved = False
-        for kind, text, shift in surfer.keys():
-            if kind == surfer.KEY_LEFT:
-                moved = try_move(-14, 0) or moved
-            elif kind == surfer.KEY_RIGHT:
-                moved = try_move(14, 0) or moved
-            elif kind == surfer.KEY_UP:
-                moved = try_move(0, -14) or moved
-            elif kind == surfer.KEY_DOWN:
-                moved = try_move(0, 14) or moved
+        surfer.keys()   # drain the typing queue so nothing leaks to the REPL
+        dx = dy = 0
+        if pad.left or pad.lx < -0.3:
+            dx = -14
+        elif pad.right or pad.lx > 0.3:
+            dx = 14
+        if pad.up or pad.ly < -0.3:
+            dy = -14
+        elif pad.down or pad.ly > 0.3:
+            dy = 14
+        if dx or dy:
+            moved = try_move(dx, dy) or moved
         if target[0] is not None:
             tx, ty = target[0]
             dx = 0 if abs(tx - ex) < 6 else (6 if tx > ex else -6)
