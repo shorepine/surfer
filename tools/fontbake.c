@@ -96,10 +96,22 @@ int main(int argc, char **argv)
     }
 
     /* FONTBAKE_THRESHOLD=1 -> 1-bit atlas (no antialiasing): crisp
-     * bitmap-font look, every pixel fully on or off. */
-    if (getenv("FONTBAKE_THRESHOLD"))
+     * bitmap-font look, every pixel fully on or off.
+     *
+     * FONTBAKE_THRESHOLD_CUT=N moves the coverage cut (default 128).
+     * It matters at small sizes: stb_truetype does not hint, so a stem
+     * narrower than a pixel can land at ~40% coverage in every cell it
+     * crosses and disappear entirely at the halfway cut, shredding the
+     * font. Lowering the cut fattens strokes back to solid. Anything
+     * below ~64 starts closing counters in 'e' and 'a'. */
+    if (getenv("FONTBAKE_THRESHOLD")) {
+        const char *c = getenv("FONTBAKE_THRESHOLD_CUT");
+        int cut = c ? atoi(c) : 128;
+        if (cut < 1) cut = 1;
+        if (cut > 255) cut = 255;
         for (int j = 0; j < aw * ah; j++)
-            atlas[j] = atlas[j] >= 128 ? 255 : 0;
+            atlas[j] = atlas[j] >= cut ? 255 : 0;
+    }
 
     float scale = stbtt_ScaleForPixelHeight(&info, size);
     int ascent, descent, gap;
