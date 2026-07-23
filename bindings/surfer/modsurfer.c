@@ -1098,7 +1098,14 @@ static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
     /* p4 only, first init only: compose straight into the scan buffer —
      * the right mode for full-screen-every-frame animation */
     bool single = n_args > 2 && mp_obj_is_true(args[2]);
-    surf_config cfg = {.max_nodes = 512, .bg = SURF_RGB(18, 20, 25)};
+    /* 2048: real apps blow 512 fast — tulip5's drum machine alone holds
+     * ~1100 live nodes (8 channel strips + a 155-row sound chooser).
+     * Pool RAM is ~sizeof(surf_node)+paint per slot; at 2048 that is a
+     * few hundred KB, fine on every backend. Exhaustion raises
+     * RuntimeError mid-scene-build, which presents as a half-alive UI
+     * (everything built before the throw works, nothing after does) —
+     * found the hard way. */
+    surf_config cfg = {.max_nodes = 2048, .bg = SURF_RGB(18, 20, 25)};
     if (inited) {
         /* soft reset (or repeat init): the VM dropped every Python object,
          * so rebuild the C scene from scratch on the surviving hal —
