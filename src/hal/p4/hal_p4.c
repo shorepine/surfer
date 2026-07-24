@@ -349,8 +349,24 @@ static void h_wait_frame(int divisor)
         S.pace_ref = S.vsync_count;
         return;
     }
-    while ((int32_t)(S.vsync_count - target) < 0)
+    /* BOUNDED wait: if vsyncs stop arriving (DSI stall), give up after
+     * ~240ms and resync rather than wedging the calling task forever —
+     * that wedge froze the whole UI task (screen static, REPL dead,
+     * audio tasks fine, both cores idle at WFI: the hang-autopsy
+     * signature). A stall now degrades to a stutter instead. */
+    int dry = 0;
+    while ((int32_t)(S.vsync_count - target) < 0) {
+        uint32_t before = S.vsync_count;
         xSemaphoreTake(S.vsync_sem, pdMS_TO_TICKS(40));
+        if (S.vsync_count == before) {
+            if (++dry >= 6) {
+                S.pace_ref = S.vsync_count;   /* resync the lock */
+                return;
+            }
+        } else {
+            dry = 0;
+        }
+    }
     S.pace_ref = target;
 }
 
