@@ -9,12 +9,17 @@
 /* Board glue polls its own touch controller; the hal turns level+position
  * into DOWN/MOVE/UP events. Return true while pressed. */
 typedef bool (*surf_p4_touch_poll_fn)(int16_t *x, int16_t *y);
+/* multitouch flavor: fill up to max contacts, return the count. When set
+ * it replaces touch_poll — the hal derives the single-pointer stream
+ * from contact 0 and serves the full set via surf_touch_points(). */
+typedef int (*surf_p4_touch_poll_multi_fn)(surf_touch_pt *out, int max);
 
 typedef struct {
     esp_lcd_panel_handle_t panel;        /* NULL → headless (bench only) */
     void                  *scan_fbs[3];  /* DSI framebuffers, RGB565 */
     int16_t                w, h;
     surf_p4_touch_poll_fn  touch_poll;   /* optional */
+    surf_p4_touch_poll_multi_fn touch_poll_multi;  /* optional, wins */
     /* With all three scan_fbs set: triple-buffer-with-damage — compose into
      * a buffer that is neither scanned nor pending, zero-copy flip on
      * present (never stalls), DMA2D the last two frames' damage forward.

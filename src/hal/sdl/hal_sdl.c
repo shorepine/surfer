@@ -26,6 +26,7 @@ static struct {
     surf_sdl_key  keys[TOUCH_RING];
     int           key_r, key_w;
     bool          mouse_down;
+    int16_t mouse_x, mouse_y;
     surf_rect     scrolled;     /* union of scroll_rect regions this frame */
     bool          has_scrolled;
 } S;
@@ -261,6 +262,15 @@ static uint64_t h_now_us(void)
     return SDL_GetPerformanceCounter() * 1000000ull / SDL_GetPerformanceFrequency();
 }
 
+/* the desktop's multitouch: the held mouse is contact 0 */
+static int h_touch_points(surf_touch_pt *out, int max)
+{
+    if (!S.mouse_down || max <= 0)
+        return 0;
+    out[0] = (surf_touch_pt){S.mouse_x, S.mouse_y, 0};
+    return 1;
+}
+
 static bool h_poll_touch(surf_touch *out)
 {
     if (S.ring_r == S.ring_w)
@@ -398,6 +408,7 @@ static const surf_hal hal_sdl = {
     .wait_idle = h_wait_idle,
     .now_us = h_now_us,
     .poll_touch = h_poll_touch,
+    .touch_points = h_touch_points,
     .alloc_image = h_alloc_image,
     .free_image = h_free_image,
     .fb_ptr = h_fb_ptr,
@@ -576,12 +587,17 @@ bool surf_hal_sdl_pump(void)
         case SDL_MOUSEBUTTONDOWN:
             if (e.button.button == SDL_BUTTON_LEFT) {
                 S.mouse_down = true;
-                push_touch((int16_t)e.button.x, (int16_t)e.button.y, SURF_TOUCH_DOWN);
+                S.mouse_x = (int16_t)e.button.x;
+                S.mouse_y = (int16_t)e.button.y;
+                push_touch(S.mouse_x, S.mouse_y, SURF_TOUCH_DOWN);
             }
             break;
         case SDL_MOUSEMOTION:
-            if (S.mouse_down)
-                push_touch((int16_t)e.motion.x, (int16_t)e.motion.y, SURF_TOUCH_MOVE);
+            if (S.mouse_down) {
+                S.mouse_x = (int16_t)e.motion.x;
+                S.mouse_y = (int16_t)e.motion.y;
+                push_touch(S.mouse_x, S.mouse_y, SURF_TOUCH_MOVE);
+            }
             break;
         case SDL_MOUSEBUTTONUP:
             if (e.button.button == SDL_BUTTON_LEFT) {

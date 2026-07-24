@@ -90,6 +90,9 @@ typedef enum {
 } surf_touch_phase;
 
 typedef struct { int16_t x, y; uint8_t phase; } surf_touch;
+/* one multitouch contact (surf_hal.touch_points / surf_touch_points);
+ * id is the controller's track id, stable while the finger is down */
+typedef struct { int16_t x, y; uint8_t id; } surf_touch_pt;
 
 /* The hal vtable — the only thing a backend implements (DESIGN.md §2.1). */
 typedef struct {
@@ -107,6 +110,12 @@ typedef struct {
     void (*wait_idle)(void);
     uint64_t (*now_us)(void);
     bool (*poll_touch)(surf_touch *out);
+    /* Optional (may be NULL): current multitouch contacts, id-stable
+     * while a finger stays down. Poll-style — apps that need more than
+     * the single-pointer dispatch (piano keyboards, XY pads) read this
+     * each frame and diff by id; everything else keeps using on_touch.
+     * Returns the number of contacts written (<= max). */
+    int (*touch_points)(surf_touch_pt *out, int max);
     void *(*alloc_image)(size_t bytes);  /* 64-byte aligned */
     void (*free_image)(void *p);
     /* Optional (may be NULL): CPU pointer to the current RGB565 compose
@@ -164,6 +173,8 @@ bool       surf_init(const surf_hal *hal, int16_t w, int16_t h, const surf_confi
 void       surf_deinit(void);
 surf_node *surf_screen(void);
 void       surf_tick(void);  /* compose dirty rects + present */
+/* current multitouch contacts (0 when the hal has no multi support) */
+int        surf_touch_points(surf_touch_pt *out, int max);
 /* Game mode: lock surf_tick to panel_rate/divisor fps (see hal
  * wait_frame). 0 (default) = uncapped. Steady 30 beats a 45-60 wobble:
  * pick the divisor your worst frame always fits. */

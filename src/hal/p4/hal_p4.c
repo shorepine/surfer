@@ -522,9 +522,21 @@ static uint64_t h_now_us(void)
  * one continuous gesture, which also keeps drags from micro-dropping. */
 #define TOUCH_RELEASE_POLLS 3
 
+#define P4_MAX_CONTACTS 5
+static surf_touch_pt s_pts[P4_MAX_CONTACTS];
+static int s_npts;
+
+static int h_touch_points(surf_touch_pt *out, int max)
+{
+    int n = s_npts < max ? s_npts : max;
+    for (int i = 0; i < n; i++)
+        out[i] = s_pts[i];
+    return n;
+}
+
 static bool h_poll_touch(surf_touch *out)
 {
-    if (!S.cfg.touch_poll)
+    if (!S.cfg.touch_poll && !S.cfg.touch_poll_multi)
         return false;
 
     static int64_t last_read;
@@ -534,7 +546,20 @@ static bool h_poll_touch(surf_touch *out)
     last_read = now;
 
     int16_t x, y;
-    bool down = S.cfg.touch_poll(&x, &y);
+    bool down;
+    if (S.cfg.touch_poll_multi) {
+        s_npts = S.cfg.touch_poll_multi(s_pts, P4_MAX_CONTACTS);
+        down = s_npts > 0;
+        if (down) {
+            x = s_pts[0].x;
+            y = s_pts[0].y;
+        }
+    } else {
+        down = S.cfg.touch_poll(&x, &y);
+        s_npts = down ? 1 : 0;
+        if (down)
+            s_pts[0] = (surf_touch_pt){x, y, 0};
+    }
     if (down) {
         S.empty_reads = 0;
         if (!S.was_down) {
@@ -754,6 +779,7 @@ static surf_hal hal_p4 = {
     .wait_idle = h_wait_idle,
     .now_us = h_now_us,
     .poll_touch = h_poll_touch,
+    .touch_points = h_touch_points,
     .alloc_image = h_alloc_image,
     .free_image = h_free_image,
     .fb_ptr = h_fb_ptr,

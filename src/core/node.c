@@ -91,6 +91,13 @@ void surf_tick(void)
         surf_g.hal->wait_frame(surf_g.frame_div);
 }
 
+int surf_touch_points(surf_touch_pt *out, int max)
+{
+    if (!surf_g.hal || !surf_g.hal->touch_points || max <= 0)
+        return 0;
+    return surf_g.hal->touch_points(out, max);
+}
+
 void surf_set_frame_divisor(int divisor)
 {
     surf_g.frame_div = divisor > 0 ? divisor : 0;
