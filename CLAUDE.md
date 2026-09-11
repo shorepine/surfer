@@ -235,6 +235,31 @@ with no message. Measured on tulip5's identical part: compose cost at
 large damaged areas fell 42–51% (wider PPA SRM block, 8×8 → 32×32); the
 ~85 µs per-op floor is unchanged, so "bake at final size" still holds.
 
+## The P4 hal writes back before a PPA copy, or the CPU's cells are lost
+
+**IDF's PPA driver invalidates the ROWS it is about to write, whole and
+`pic_w` wide, before an SRM copy or a fill** (`ppa_srm.c` /
+`ppa_blend.c`: M2C over the output's "extended window"). The textgrid
+paints its cells with the CPU straight into the framebuffer through
+`fb_ptr`, and this hal wrote them back once per frame at present — so
+within one compose, cells painted BEFORE an opaque blit on the same
+rows were dropped from cache before they reached memory, and memory
+kept what the forward copy had put there: the previous frame. On the
+glass that was a sprite leaving copies of itself along the launcher
+panel's edge in tulip5 — the erase of its old position, CPU-painted by
+the console grid, discarded when the panel's skin was copied on those
+rows, and only outside the panel because the panel repainted the rest.
+Never on the SDL hal, and not the compositor's fault.
+
+A BLEND is safe: the driver writes back its `in_bg` first and `in_bg`
+is this buffer. A COPY or FILL is not. So `h_blit` and `h_fill` write
+back the rows their block spans (`fb_writeback_rows`) — only while
+`cpu_wrote` says `fb_ptr` has been handed out since the last present,
+which clears it on every path, so a frame with no textgrid pays
+nothing and a frame with one pays a C2M over mostly clean lines. The
+rotated path already synced `S.comp` before its first rect; it is the
+same flag now.
+
 ## The hal-shift smear rule
 
 Four paths hand a rect to the hal to shift in place — the layer's

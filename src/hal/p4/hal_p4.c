@@ -39,6 +39,7 @@ static struct {
     surf_rect            prev_r[SURF_MAX_DIRTY_P4];
     int                  prev_n;
     bool                 prev_overflow;  /* prev list truncated: unusable */
+    bool                 cpu_wrote;      /* fb_ptr handed out since the last writeback */
     uint32_t             frame_no;
     uint32_t             fb_stamp[3];    /* frame each buffer is current to */
     /* rotated scanout (cfg.rotation != 0). `comp` is the compose buffer
@@ -241,8 +242,41 @@ static void ppa_blend_sync(const ppa_blend_oper_config_t *op)
         ppa_end(ppa_do_blend(S.blend_cl, op));
 }
 
+/* THE PPA DRIVER INVALIDATES THE ROWS IT IS ABOUT TO WRITE, AND THE CPU
+ * MAY STILL OWN SOME OF THEM. Before an SRM copy or a fill, IDF's
+ * driver does an M2C over the output "extended window" -- WHOLE ROWS,
+ * pic_w wide, for the block's height -- so any framebuffer pixel the
+ * CPU wrote this compose and has not yet written back (a textgrid's
+ * cells, through fb_ptr) is dropped from cache before it reaches
+ * memory, and memory keeps whatever the forward copy put there: the
+ * previous frame. Seen on the glass as a sprite leaving copies of
+ * itself wherever an opaque blit shared its rows -- the mouse pointer
+ * along the launcher panel's edge, the erase of its old position
+ * discarded when the panel's skin was copied on the same rows. A BLEND
+ * is safe (the driver writes back in_bg first, and in_bg is this
+ * buffer); a COPY or FILL is not. So the rows an op spans are written
+ * back first, and only while the CPU has written since the last
+ * present -- clean lines cost nothing and a frame with no textgrid in
+ * it pays nothing. The blend path is left alone: the driver already
+ * does it. */
+static void fb_writeback_rows(int32_t y, int32_t h)
+{
+    if (!S.cpu_wrote || h <= 0)
+        return;
+    if (y < 0) { h += y; y = 0; }
+    if (y + h > S.cfg.h) h = S.cfg.h - y;
+    if (h <= 0)
+        return;
+    uintptr_t lo = (uintptr_t)S.fb + (uintptr_t)y * S.cfg.w * 2;
+    uintptr_t hi = lo + (uintptr_t)h * S.cfg.w * 2;
+    lo &= ~(uintptr_t)(P4_ALIGN - 1);
+    hi = (hi + P4_ALIGN - 1) & ~(uintptr_t)(P4_ALIGN - 1);
+    esp_cache_msync((void *)lo, hi - lo, ESP_CACHE_MSYNC_FLAG_DIR_C2M);
+}
+
 static void h_fill(surf_rect dst, surf_color c)
 {
+    fb_writeback_rows(dst.y, dst.h);
     ppa_fill_oper_config_t op = {
         .out = {
             .buffer = S.fb,
@@ -305,6 +339,7 @@ static void srm_copy(const surf_image *src, surf_rect sr, void *dst_buf,
 
 static void h_blit(const surf_image *src, surf_rect sr, surf_point dst)
 {
+    fb_writeback_rows(dst.y, sr.h);
     srm_copy(src, sr, S.fb, S.fb_bytes, S.cfg.w, S.cfg.h, dst);
 }
 
@@ -831,6 +866,7 @@ static void present_rotated(const surf_rect *dirty, int n)
     if (maxy > miny)
         surf_hal_p4_sync((uint8_t *)S.comp + (size_t)miny * S.cfg.w * 2,
                          (size_t)(maxy - miny) * S.cfg.w * 2);
+    S.cpu_wrote = false;
 
     /* scroll_rect moved pixels outside the damage system's view, so no
      * buffer can be trusted rect-by-rect — including this one. */
@@ -896,6 +932,7 @@ static void h_present(const surf_rect *dirty, int n)
                             ESP_CACHE_MSYNC_FLAG_DIR_C2M |
                                 ESP_CACHE_MSYNC_FLAG_UNALIGNED);
         }
+        S.cpu_wrote = false;
         S.scrolled = false;
         return;
     }
@@ -908,6 +945,7 @@ static void h_present(const surf_rect *dirty, int n)
     esp_lcd_panel_draw_bitmap(S.cfg.panel, 0, 0, S.cfg.w, S.cfg.h,
                               S.cfg.scan_fbs[S.back]);
     (void)miny; (void)maxy;
+    S.cpu_wrote = false;         /* everything the CPU wrote is in memory now */
     S.last_flip = (uint8_t)S.back;
 
     uint8_t live = S.live;  /* snapshot: the ISR may update it under us */
@@ -1170,6 +1208,7 @@ static bool h_poll_touch(surf_touch *out)
 static void *h_fb_ptr(int32_t *stride_bytes)
 {
     *stride_bytes = S.cfg.w * 2;
+    S.cpu_wrote = true;          /* fb_writeback_rows: a PPA op must not drop these */
     return S.fb;
 }
 
