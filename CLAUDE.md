@@ -260,6 +260,22 @@ nothing and a frame with one pays a C2M over mostly clean lines. The
 rotated path already synced `S.comp` before its first rect; it is the
 same flag now.
 
+## The P4 vsync callback lives in IRAM, for a host that writes flash
+
+The DPI panel is refreshed by an interrupt: IDF's driver restarts the
+frame DMA from its transfer-done ISR every frame. During a flash erase
+or program the cache is off and every ISR not marked cache-safe is
+masked, so the panel is not fed, the DSI bridge underruns and the
+glass goes blank or blue for the length of the operation -- a host
+writing its own flash (a USB disk handed to a computer, a settings
+save) sees the screen flash on every sector. IDF's answer is
+`CONFIG_LCD_DSI_ISR_CACHE_SAFE`, and under it
+`esp_lcd_dpi_panel_register_event_callbacks` REFUSES a callback that
+is not in IRAM. So `vsync_cb` carries `IRAM_ATTR`: it reads and writes
+statics in DRAM and gives a semaphore from ISR context, which is in
+IRAM unless a host moves FreeRTOS into flash. The option itself is the
+host's to set; nothing here needs it to be on.
+
 ## The hal-shift smear rule
 
 Four paths hand a rect to the hal to shift in place — the layer's

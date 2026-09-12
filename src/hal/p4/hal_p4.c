@@ -10,6 +10,7 @@
 
 #include "driver/ppa.h"
 #include "esp_async_fbcpy.h"  /* esp_lcd priv_include: DMA2D rect copy */
+#include "esp_attr.h"
 #include "esp_cache.h"
 #include "esp_heap_caps.h"
 #include "esp_lcd_mipi_dsi.h"
@@ -615,9 +616,15 @@ static void fbcpy_sync(const esp_async_fbcpy_trans_desc_t *t)
 }
 
 /* The end-of-frame ISR is when the DPI DMA latches the most recently
- * flipped buffer; recording it tells present which buffer is on glass. */
-static bool vsync_cb(esp_lcd_panel_handle_t panel, esp_lcd_dpi_panel_event_data_t *ev,
-                     void *arg)
+ * flipped buffer; recording it tells present which buffer is on glass.
+ * IRAM, because a host may build with CONFIG_LCD_DSI_ISR_CACHE_SAFE so
+ * the panel keeps refreshing through a flash erase (the DPI driver
+ * restarts its frame DMA from an ISR, and with the cache off that ISR
+ * is masked and the glass goes blank for the length of the erase) --
+ * and under that option the driver refuses a callback outside IRAM.
+ * Everything this touches is a static in DRAM and a FreeRTOS give. */
+static bool IRAM_ATTR vsync_cb(esp_lcd_panel_handle_t panel, esp_lcd_dpi_panel_event_data_t *ev,
+                               void *arg)
 {
     (void)panel; (void)ev; (void)arg;
     S.live = S.last_flip;
