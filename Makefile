@@ -28,6 +28,12 @@ sdl: build/surfer_demo build/surfer_settings build/surfer_type build/surfer_edit
 test: build/surfer_test
 	./build/surfer_test
 
+# the runtime-baked strips' REFERENCE, for the test build only (see
+# tools/gen_widget_assets.py ref()); nothing that ships includes it
+$(GEN_DIR)/widget_art_ref.h: tools/gen_widget_assets.py
+	@mkdir -p $(GEN_DIR)
+	python3 tools/gen_widget_assets.py --ref > $@
+
 $(GEN_DIR)/bounce_assets.h: tools/gen_demo_assets.py
 	@mkdir -p $(GEN_DIR)
 	python3 tools/gen_demo_assets.py > $@
@@ -377,9 +383,10 @@ build/surfer_bounce: $(CORE_SRCS) $(SDL_SRCS) demos/bounce.c \
 # mock hal only, so they are named sdl_* and filtered out here
 TEST_SRCS := $(filter-out tests/sdl_%.c,$(wildcard tests/*.c))
 
-build/surfer_test: $(CORE_SRCS) $(WIDGET_SRCS) $(TEST_SRCS) tests/mock_hal.h $(HDRS)
+build/surfer_test: $(CORE_SRCS) $(WIDGET_SRCS) $(TEST_SRCS) tests/mock_hal.h $(HDRS) \
+		$(GEN_DIR)/widget_art_ref.h
 	@mkdir -p build
-	$(CC) $(CFLAGS) -Isrc/core -Itests \
+	$(CC) $(CFLAGS) -Isrc/core -Itests -I$(GEN_DIR) \
 		-o $@ $(CORE_SRCS) $(WIDGET_SRCS) $(TEST_SRCS) -lm
 
 # present-coherence regression (fb vs presented texture after fast

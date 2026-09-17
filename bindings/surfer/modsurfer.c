@@ -24,10 +24,9 @@
 /* ---- baked default style; pixels re-homed by surfer_port_prepare_image
  * at init (flash .rodata → PSRAM on device, no-op on desktop) ---- */
 
-static surf_image knob_img = {
-    .pixels = (void *)widget_knob_px, .w = WKNOB_STRIP_W, .h = WKNOB_SIZE,
-    .stride = WKNOB_STRIP_W, .format = SURF_FMT_A8,
-};
+/* the knob and selector strips are NOT here: surf_art_knob_strip() and
+ * surf_art_selector_strip() bake them on first use (src/widgets/art.c),
+ * which is what took 565 KB off the device image. */
 static surf_image track_img = {
     .pixels = (void *)widget_trackfull_px, .w = WTRACKFULL_W, .h = WTRACKFULL_H,
     .stride = WTRACKFULL_W * 4, .format = SURF_FMT_ARGB8888,
@@ -64,11 +63,6 @@ static surf_image sbtrackh_img = {
 static const surf_image led_img = {
     .pixels = (void *)widget_led_px, .w = WLED_SIZE * WLED_FRAMES,
     .h = WLED_SIZE, .stride = WLED_SIZE * WLED_FRAMES, .format = SURF_FMT_A8,
-};
-static surf_image sel_img = {
-    .pixels = (void *)widget_sel_px, .w = WSEL_SIZE * WKNOB_FRAMES,
-    .h = WSEL_SIZE, .stride = WSEL_SIZE * WKNOB_FRAMES,
-    .format = SURF_FMT_A8,
 };
 /* the slider's art lying down, for a horizontal one */
 static surf_image trackh_img = {
@@ -115,10 +109,6 @@ static surf_image btnpr_img = {
     .pixels = (void *)widget_btnpr_px, .w = WBTN_SIZE, .h = WBTN_SIZE,
     .stride = WBTN_SIZE * 4, .format = SURF_FMT_ARGB8888,
 };
-static surf_image knobsm_img = {
-    .pixels = (void *)widget_knobsm_px, .w = WKNOBSM_STRIP_W, .h = WKNOBSM_SIZE,
-    .stride = WKNOBSM_STRIP_W, .format = SURF_FMT_A8,
-};
 static surf_image arrow_img = {
     .pixels = (void *)widget_arrow_px, .w = WARROW_W * 2, .h = WARROW_H,
     .stride = WARROW_W * 2 * 4, .format = SURF_FMT_ARGB8888,
@@ -127,7 +117,6 @@ static surf_image arrow_img = {
 
 static void prepare_assets(void)
 {
-    surfer_port_prepare_image(&knob_img);
     surfer_port_prepare_image(&track_img);
     surfer_port_prepare_image(&cap_img);
     surfer_port_prepare_image(&sbar_img);
@@ -146,8 +135,6 @@ static void prepare_assets(void)
     surfer_port_prepare_image(&arrow_img);
     surfer_port_prepare_image(&btn_img);
     surfer_port_prepare_image(&btnpr_img);
-    surfer_port_prepare_image(&knobsm_img);
-    surfer_port_prepare_image(&sel_img);
     /* led_img stays const: every LED copies the struct and re-homing a
      * shared const would be re-homing it once per copy anyway. Its pixels
      * are 1 byte deep and small, so the P4 blends them from flash. */
@@ -3643,12 +3630,14 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_led_obj, 2, 3, mod_led);
  * tap advances one position. */
 static mp_obj_t mod_selector(mp_obj_t x, mp_obj_t y, mp_obj_t positions)
 {
-    static const surf_knob_style st = {.strip = &sel_img,
-                                       .frame_w = WSEL_SIZE,
-                                       .frame_h = WSEL_SIZE,
-                                       .frames = WKNOB_FRAMES};
-    surf_selector *sel = surf_selector_new(surf_screen(), 0, 0, &st,
-                                           mp_obj_get_int(positions));
+    /* the strip is baked on the first selector of the session; a widget
+     * copies the struct and points at the shared pixels */
+    surf_knob_style st = {.strip = surf_art_selector_strip(WSEL_SIZE),
+                          .frame_w = WSEL_SIZE, .frame_h = WSEL_SIZE,
+                          .frames = SURF_ART_FRAMES};
+    surf_selector *sel = st.strip ? surf_selector_new(surf_screen(), 0, 0, &st,
+                                                      mp_obj_get_int(positions))
+                                  : NULL;
     if (!sel)
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("selector create failed"));
     surf_node *node = surf_selector_node(sel);
@@ -3717,17 +3706,14 @@ static MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(mod_slider_obj, 2, 4, mod_slider);
 
 static mp_obj_t mod_knob(size_t n_args, const mp_obj_t *args)
 {
-    static const surf_knob_style big = {.strip = &knob_img, .frame_w = WKNOB_SIZE,
-                                        .frame_h = WKNOB_SIZE,
-                                        .frames = WKNOB_FRAMES};
-    static const surf_knob_style small = {.strip = &knobsm_img,
-                                          .frame_w = WKNOBSM_SIZE,
-                                          .frame_h = WKNOBSM_SIZE,
-                                          .frames = WKNOB_FRAMES};
-    /* third arg: pixel size — anything < 52 gets the small style */
-    const surf_knob_style *st =
-        (n_args > 2 && mp_obj_get_int(args[2]) < 52) ? &small : &big;
-    surf_knob *k = surf_knob_new(surf_screen(), 0, 0, st);
+    /* third arg: pixel size — anything < 52 gets the small style. The
+     * strip for that size is baked on the first knob of the session and
+     * shared by every one after it (src/widgets/art.c). */
+    int16_t size = (n_args > 2 && mp_obj_get_int(args[2]) < 52) ? WKNOBSM_SIZE
+                                                                 : WKNOB_SIZE;
+    surf_knob_style st = {.strip = surf_art_knob_strip(size), .frame_w = size,
+                          .frame_h = size, .frames = SURF_ART_FRAMES};
+    surf_knob *k = st.strip ? surf_knob_new(surf_screen(), 0, 0, &st) : NULL;
     if (!k)
         mp_raise_msg(&mp_type_RuntimeError, MP_ERROR_TEXT("knob create failed"));
     surf_node *node = surf_knob_node(k);

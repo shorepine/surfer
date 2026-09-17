@@ -1089,6 +1089,18 @@ typedef struct {
     surf_color        color;
 } surf_knob_style;
 
+/* ---- built-in knob art, baked on first use (src/widgets/art.c) ----
+ *
+ * The 64-frame A8 filmstrips the knob and the selector draw from, at any
+ * face size, rendered by the CPU into a hal-allocated image the first
+ * time a size is asked for and shared by every widget of that size from
+ * then on. They used to ship as 565 KB of flash .rodata; the faces are
+ * tools/gen_widget_assets.py's, ported. NULL if the image could not be
+ * allocated. Never freed. */
+#define SURF_ART_FRAMES 64
+const surf_image *surf_art_knob_strip(int16_t size);
+const surf_image *surf_art_selector_strip(int16_t size);
+
 typedef enum {
     SURF_KNOB_DRAG_VERTICAL = 0,  /* DAW convention (DESIGN.md §2.6) */
     SURF_KNOB_DRAG_ANGULAR  = 1,

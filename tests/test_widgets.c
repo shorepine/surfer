@@ -1,5 +1,6 @@
 /* M1 tests: filmstrip/ninepatch nodes, touch dispatch + capture, slider
  * and knob behavior driven through the real input path (queued touches). */
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -907,8 +908,85 @@ static void test_destroy_during_steal(void)
     OK(ghost_calls == 0);
 }
 
+
+/* The knob and selector strips are BAKED, on first use, from a port of
+ * the generator's faces — and the port is held to the generator BYTE FOR
+ * BYTE: widget_art_ref.h is the generator's own output for the three
+ * sizes (test build only; it is the 565 KB the runtime bake exists not
+ * to ship). A unit of slack per pixel is allowed because the C is float
+ * where the Python is double and an ink value on a truncation boundary
+ * may land a unit off on some libm; on this one it is zero. */
+#include "widget_art_ref.h"
+
+static void same_strip(const surf_image *s, const uint8_t *ref, int size)
+{
+    int maxd = 0, differ = 0;
+    for (int y = 0; y < size; y++)
+        for (int x = 0; x < size * SURF_ART_FRAMES; x++) {
+            int d = ((const uint8_t *)s->pixels)[y * s->stride + x] -
+                    ref[y * size * SURF_ART_FRAMES + x];
+            if (d < 0) d = -d;
+            if (d) differ++;
+            if (d > maxd) maxd = d;
+        }
+    OK(maxd <= 1);
+    OK(differ * 1000 < size * size * SURF_ART_FRAMES);   /* under 0.1% */
+}
+
+/* The A8 value at a quarter-size radius along the pointer's own line
+ * for a frame, and at that point's mirror across the vertical axis: on
+ * the pointer reads bright, off it reads the body. "Brightest pixel in
+ * the frame" is the wrong probe — the knob's specular highlight outranks
+ * the pointer, which is how the first cut of this test was wrong. */
+static void pointer_probe(const surf_image *s, int size, int frame, int *on, int *off)
+{
+    double ang = (-135.0 + 270.0 * frame / (SURF_ART_FRAMES - 1)) * 3.14159265 / 180.0;
+    double c = size / 2.0, rr = size * 0.25;
+    int x = (int)(c + sin(ang) * rr), y = (int)(c - cos(ang) * rr);
+    const uint8_t *px = s->pixels;
+    *on = px[y * s->stride + frame * size + x];
+    *off = px[y * s->stride + frame * size + (size - 1 - x)];
+}
+
+static void test_art_strips(void)
+{
+    fresh(100, 100, 16);
+    const surf_image *k = surf_art_knob_strip(64);
+    OK(k && k->format == SURF_FMT_A8 && k->w == 64 * SURF_ART_FRAMES && k->h == 64);
+    OK(surf_art_knob_strip(64) == k);              /* cached, not rebaked */
+    OK(surf_art_knob_strip(40) != k);              /* a size is its own strip */
+    OK(surf_art_knob_strip(4) == NULL);
+    const uint8_t *px = k->pixels;
+    OK(px[0] == 0 && px[63] == 0);                 /* corners are outside the disc */
+    OK(px[32 * k->stride + 32] > 0);               /* the middle is ink */
+    /* the pointer sweeps: bright on its line, body-grey across from it,
+     * at the first frame, mid-sweep (straight up: on == off there) and
+     * the last */
+    int on, off;
+    pointer_probe(k, 64, 0, &on, &off);
+    OK(on > 200 && off < 150);
+    pointer_probe(k, 64, SURF_ART_FRAMES - 1, &on, &off);
+    OK(on > 200 && off < 150);
+    pointer_probe(k, 64, 31, &on, &off);           /* 2 deg short of up */
+    OK(on > 200 && off > 200);
+    OK(mock_sync_calls >= 1);                      /* flushed for a DMA blitter */
+
+    const surf_image *s = surf_art_selector_strip(56);
+    OK(s && s->format == SURF_FMT_A8 && s->w == 56 * SURF_ART_FRAMES && s->h == 56);
+    OK(s != k && surf_art_selector_strip(56) == s);
+    pointer_probe(s, 56, 0, &on, &off);            /* the wedge, not the body */
+    OK(on > 230 && off < 200);
+    pointer_probe(s, 56, SURF_ART_FRAMES - 1, &on, &off);
+    OK(on > 230 && off < 200);
+
+    same_strip(k, ref_knob_px, 64);
+    same_strip(surf_art_knob_strip(40), ref_knobsm_px, 40);
+    same_strip(s, ref_sel_px, 56);
+}
+
 void run_widget_tests(void)
 {
+    test_art_strips();
     test_colorpicker();
     test_textinput_mask();
     test_led_and_selector();

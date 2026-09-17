@@ -1510,6 +1510,58 @@ it. The body also stops short of full: with one tint nothing can be
 *brighter* than the tint, so the index line only reads if the body leaves
 it headroom.
 
+## The knob strips are BAKED AT FIRST USE, not shipped
+
+`src/widgets/art.c`. The three 64-frame A8 filmstrips — the 64 px knob,
+the 40 px knob and the 56 px selector — were **565 KB of flash
+.rodata**, a tenth of a device image that had 192 bytes of partition
+left, and on the P4 they were being memcpy'd into PSRAM at init anyway
+(`surfer_port_prepare_image`: the PPA cannot DMA from memory-mapped
+flash). So they are rendered into that PSRAM instead, the first time a
+widget of that size is made — `surf_art_knob_strip(size)` /
+`surf_art_selector_strip(size)` — and shared by every widget after it.
+The FRAME PATH is untouched: a knob still picks a pre-rendered frame, and
+the blend is the same A8 op over the same pixels. `widget_assets.h` went
+2.7 MB to 310 KB.
+
+**The faces are `tools/gen_widget_assets.py`'s, ported line for line** —
+`knob_strip()` and `selector_strip()` stay in that file as the reference,
+and `--ref` emits them as C arrays for the TEST build alone, where
+`test_art_strips` holds the port to them byte for byte (zero differing
+pixels of 565,248 on the mac; the test allows a unit of slack per pixel
+because the C is `float` where the Python is double, and the P4 has no
+hardware double). Change the look in the generator first, then mirror
+it; the test says when the two have drifted.
+
+**The body is computed once, the pointer 64 times, and only where it
+can land.** Everything in a face but the pointer (the knob) or the wedge
+(the selector) is the same in every frame, so its ink is one pass and
+every frame starts as a copy of it; the sweep re-rasterises the pixels
+inside the pointer's bounding box, or tests the wedge's candidate pixels
+with a rotation and two compares. Same bytes out, and it is what made
+the bake affordable on the glass — measured on the P4X, first widget of
+each size, PANEL=normal:
+
+| | full face x64 | body once + patch |
+|---|---|---|
+| knob 64 px | 155 ms | **30 ms** |
+| knob 40 px | 59 ms | **13 ms** |
+| selector 56 px | 145 ms | **21 ms** |
+
+So the first knob of a session costs its app's `build()` 30 ms, once,
+and every knob after it 0.1 ms; all three strips together are 64 ms.
+Lazy rather than in `surf_init` because a game never makes one, and
+never freed because every widget of that size points at the pixels — and
+a soft reset frees the node pool, not images, so the second session pays
+nothing. The image went 7,339,840 -> 6,778,400 bytes.
+
+What was NOT drawn procedurally per value change, and why: the same
+rasteriser through the shape API costs **2.6 ms per knob per change on
+the P4X** (tulip5 measured it) against a frame-index write today, which
+is one dragged knob's worth of frame and ten MIDI-driven knobs' worth of
+dropped frame. Baking keeps the strip and drops the flash; that was the
+whole trade.
+
 ## Writing a RUN of cells
 
 `grid.set_cells(col, row, s, fg, bg)` writes a whole same-coloured run in

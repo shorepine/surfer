@@ -41,10 +41,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    surf_image knob_img = {
-        .pixels = (void *)widget_knob_px, .w = WKNOB_STRIP_W, .h = WKNOB_SIZE,
-        .stride = WKNOB_STRIP_W * 4, .format = SURF_FMT_ARGB8888,
-    };
     surf_image track_img = {
         .pixels = (void *)widget_trackfull_px, .w = WTRACKFULL_W, .h = WTRACKFULL_H,
         .stride = WTRACKFULL_W * 4, .format = SURF_FMT_ARGB8888,
@@ -70,7 +66,7 @@ int main(int argc, char **argv)
                                   .frame_h = WCHECK_SIZE};
     surf_slider_style sstyle = {.track = &track_img, .inset = WTRACK_INSET,
                                 .cap = &cap_img};
-    surf_knob_style kstyle = {.strip = &knob_img, .frame_w = WKNOB_SIZE,
+    surf_knob_style kstyle = {.strip = surf_art_knob_strip(WKNOB_SIZE), .frame_w = WKNOB_SIZE,
                               .frame_h = WKNOB_SIZE, .frames = WKNOB_FRAMES};
     surf_dropdown_style dstyle = {
         .panel = &panel_img, .inset = WPANEL_INSET, .font = &surf_font_ui16,
