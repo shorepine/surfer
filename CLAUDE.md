@@ -970,7 +970,10 @@ because every caller would otherwise write them:
   handler, which moves the caret and then calls the Python callback.
 - **`.key(k)` applies ONE event from `surfer.keys()`** — the
   `(kind, text, shift)` tuple — and returns whether it consumed it, so
-  Enter and hotkeys fall through to the app:
+  Enter and hotkeys fall through to the app. **Tab is refused too**:
+  the hal pushes it as TEXT `"\t"` (there is no KEY_TAB), and inserting
+  it put an invisible tab into a wifi password nobody could then see.
+  A host that moves focus between fields does it on the False:
 
   ```python
   for k in surfer.keys():

@@ -848,9 +848,19 @@ static mp_obj_t node_key(mp_obj_t self_in, mp_obj_t k)
     int kind = mp_obj_get_int(item[0]);
     bool shift = len > 2 && mp_obj_is_true(item[2]);
     switch (kind) {
-    case SURFER_KEY_TEXT:
-        surf_textinput_insert(n, mp_obj_str_get_str(item[1]));
+    case SURFER_KEY_TEXT: {
+        /* TAB IS NAVIGATION, NOT TEXT. The hal pushes it as TEXT 0x09
+         * (there is no KEY_TAB), so inserting it put an invisible tab
+         * character into whatever field had the keys -- a wifi password
+         * that then never matched, typed by a host that only wanted to
+         * move to the next field. Refused like Enter in a one-line
+         * field: False, "not mine", and the host moves focus. */
+        const char *t = mp_obj_str_get_str(item[1]);
+        if (t[0] == '\t' && t[1] == 0)
+            return mp_const_false;
+        surf_textinput_insert(n, t);
         break;
+    }
     case SURFER_KEY_LEFT:      surf_textinput_move(n, -1, shift); break;
     case SURFER_KEY_RIGHT:     surf_textinput_move(n, 1, shift); break;
     case SURFER_KEY_HOME:      surf_textinput_move(n, -99999, shift); break;
