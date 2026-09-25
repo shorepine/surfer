@@ -1679,7 +1679,7 @@ before `prepare_assets` for exactly this reason.
 Sources: Roboto (ui12/16/16b/23/28/36/48 — the 36 and 48 are display
 sizes, plain AA, where partial coverage reads as a smooth curve rather
 than the lumpiness thresholding an off-grid outline gives at small
-sizes) + JetBrains Mono (mono16, the one AA fixed-width face and the
+sizes) + DejaVu Sans Mono (mono16, the one AA fixed-width face and the
 house default), BigBlue Terminal (bigblue12), **ten oldschool PC ROM
 faces** (VileR's pack, CC BY-SA 4.0 — see assets/fonts/LICENSE.txt, and
 note it is the only copyleft asset here), 4 Kenney pixel faces (CC0),
@@ -1743,7 +1743,9 @@ Early, but **after `surfer.init()`** — see the root-pointer rule below.
 Setting it at import time is what killed the P4X on every soft reset.
 
 MicroPython takes a font as a name, a `Font` object, or a legacy index
-anywhere: `surfer.label(s, x, y, c, "helvR12")`,
+anywhere (`FONT_UI16`/`FONT_UI28`/`FONT_MONO16` ARE the names: as
+indices they had drifted to ui12/ui16/ui16b as the registry grew, the
+last a proportional face textgrid refuses): `surfer.label(s, x, y, c, "helvR12")`,
 `surfer.textgrid(cols, rows, fg, bg, "toshiba9x16")`, `surfer.font(name_or_blob)`,
 `surfer.fonts([mono_only])`. `surf_font_is_mono` gates the textgrid — it
 sizes its cell from 'M', so a proportional face is refused.

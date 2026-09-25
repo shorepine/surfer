@@ -4062,9 +4062,13 @@ static const mp_rom_map_elem_t surfer_globals_table[] = {
     {MP_ROM_QSTR(MP_QSTR_KEY_ENTER), MP_ROM_INT(11)},
     {MP_ROM_QSTR(MP_QSTR_KEY_ESC), MP_ROM_INT(12)},
     /* fonts */
-    {MP_ROM_QSTR(MP_QSTR_FONT_UI16), MP_ROM_INT(0)},
-    {MP_ROM_QSTR(MP_QSTR_FONT_UI28), MP_ROM_INT(1)},
-    {MP_ROM_QSTR(MP_QSTR_FONT_MONO16), MP_ROM_INT(2)},
+    /* NAMES, not registry indices: index 0/1/2 is whatever the Makefile
+     * lists first, and after the registry grew these three resolved to
+     * ui12, ui16 and ui16b -- a proportional face textgrid refuses. Every
+     * font argument takes a name, so the constant IS the name. */
+    {MP_ROM_QSTR(MP_QSTR_FONT_UI16), MP_ROM_QSTR(MP_QSTR_ui16)},
+    {MP_ROM_QSTR(MP_QSTR_FONT_UI28), MP_ROM_QSTR(MP_QSTR_ui28)},
+    {MP_ROM_QSTR(MP_QSTR_FONT_MONO16), MP_ROM_QSTR(MP_QSTR_mono16)},
     /* touch phases */
     {MP_ROM_QSTR(MP_QSTR_ALIGN_LEFT), MP_ROM_INT(0)},
     {MP_ROM_QSTR(MP_QSTR_ALIGN_CENTER), MP_ROM_INT(1)},

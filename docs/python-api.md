@@ -1,44 +1,39 @@
 # surfer Python API
 
-The MicroPython binding to surfer. Hand-written, deliberately small, and
-**early — names may still change.** This documents what exists today on
-the unix port; the esp32p4 port will expose the same API.
+The MicroPython binding to surfer. The same module runs on every port:
+the desktop (SDL), the ESP32-P4, the web and iOS.
 
-## Running
+**Arguments are positional.** The `name=default` forms below show what
+you may leave off; only `Node.tween` also accepts keywords.
+
+**A method on the wrong kind of node is usually silently ignored**
+(`set_color` on a label does nothing). The ones that raise are the
+transform, opacity, fade, tween, hitbox and `set_image` calls.
+
+## Running it
 
 ```sh
 make mpy      # builds MicroPython (MPY_DIR ?= ~/micropython) with the surfer module
 ~/micropython/ports/unix/build-standard/micropython bindings/surfer/repl.py
 ```
 
-`repl.py` boots an on-screen REPL with `surfer` and
-`screen` already in scope. Everything below can be typed at it live.
+`repl.py` boots an on-screen REPL with `surfer` and `screen` in scope, so
+everything below can be typed live.
 
 ## The module
 
 ```python
 import surfer
 
-surfer.init(w=1024, h=600)   # open the display; call once, first
-surfer.tick()                # pump input, run animations, compose, present
-                             # → False when the window wants to close (Esc)
-surfer.keys()                # drain pending key events
-                             # → [(kind, text, shift, ctrl), ...]
-surfer.keys_held()           # keys DOWN right now → ((kind, text), ...) — for games
+surfer.init(1024, 600)       # w, h, single=False. Open the display, first.
+                             # Calling it again rebuilds the scene (and resizes)
+surfer.tick()                # input, animation, compose, present
+                             # -> False when the window is closed
 surfer.screen()              # the root Node
-surfer.rgb(r, g, b)          # 0-255 each → packed RGB565 color int
-surfer.screenshot(path)      # dump the framebuffer as binary PPM → bool
-                             # (desktop/web; on the P4 use fb_read + Python IO)
-surfer.fb_read(x, y, w, h)   # framebuffer region → RGB888 bytes, every port
-surfer.fb_image(x, y, w, h)  # ...or as an Image (a copy), every port. All four
-                             # args optional — bare, it is the whole screen.
-                             # write_png(fb_image()) is a PNG screenshot;
-                             # image_scale() into a smaller one is a thumbnail
-surfer.wheel()               # drain wheel/two-finger pushes NO scrollview took
-                             # → [(x, y, dx, dy), ...]; dx/dy are pixels of
-                             # content movement, x/y framebuffer pixels
-surfer._touch(x, y, phase)   # inject a synthetic touch (tests / on-screen keyboards)
-surfer._key(kind, text, shift, ctrl)   # ... and a synthetic key
+surfer.rgb(r, g, b)          # 0-255 each -> a packed RGB565 colour int
+surfer.frame_rate(fps)       # lock tick() to a divisor of the refresh; 0 uncaps.
+                             # -> the rate actually locked
+surfer.cpu()                 # busy percent per core since the last call
 ```
 
 The app owns the loop:
@@ -49,480 +44,492 @@ while surfer.tick():
         ...
 ```
 
-Widget callbacks fire from inside `surfer.tick()`, on the same thread —
-no locks, no marshaling.
+Callbacks fire from inside `surfer.tick()`, on the same thread.
 
-**Except on the web** (`sys.platform == "webassembly"`), where a
-blocking loop would freeze the tab: the browser drives one frame per
-`requestAnimationFrame`, and an app registers its per-frame work as a
-hook instead of looping:
+**On the web** a blocking loop would freeze the tab, so the browser
+drives one frame per `requestAnimationFrame` and an app registers its
+per-frame work as a hook:
 
 ```python
 import sys, repl
 if sys.platform == "webassembly":
-    repl.app_frame = my_step       # called once per frame after the REPL;
-else:                              # return False to unhook
+    repl.app_frame = my_step       # called once per frame; return False to unhook
+else:
     while surfer.tick():
         if my_step() is False:
             break
 ```
 
-See [examples/space.py](../bindings/surfer/examples/space.py) and
-[examples/gamma9001.py](../bindings/surfer/examples/gamma9001.py) for
-the full pattern.
+`frame_rate(fps)` is for games: it holds `tick()` to a steady rate the
+panel can divide into, so motion doesn't wobble with load. The panel's
+refresh differs by board (60.4 Hz on the P4X, 69.7 Hz on the v1.x EV
+board), so scale speeds by the value it returns.
 
 ## Nodes
 
-Nodes are the scene graph: cheap, pooled, retained. All factory
-arguments are positional (the `name=` forms below just show defaults):
+Nodes are the scene: pooled, retained, cheap. Add one to a parent and
+the compositor repaints only what changes.
 
-| factory | notes |
+| factory | |
 |---|---|
-| `surfer.group(x, y)` | container; children render at its offset |
-| `surfer.rect(x, y, w, h, color=grey)` | solid fill |
-| `surfer.label(text, x, y, color=white, font=FONT_UI16)` | proportional text |
-| `surfer.textgrid(cols, rows, fg=..., bg=..., font=FONT_MONO16)` | fast fixed-width text (terminals, editors) |
-| `surfer.scrollview(x, y, w, h)` | clipped viewport; drag/flick scrolls its children |
-| `surfer.sprite(image, x, y)` | a runtime image on screen — see [Images & sprites](#images--sprites) |
+| `surfer.group(x, y)` | a container; draws nothing |
+| `surfer.rect(x, y, w, h, color=grey)` | a solid, opaque rectangle |
+| `surfer.label(text, x, y, color=white, font="ui12")` | proportional text |
+| `surfer.textgrid(cols, rows, fg, bg, font="mono16")` | a grid of character cells (needs a monospace font) |
+| `surfer.textinput(x, y, w, color=white, font="ui12")` | one editable line |
+| `surfer.textarea(x, y, w, rows, color=white, font="ui12")` | editable, wrapped, `rows` lines tall |
+| `surfer.scrollview(x, y, w, h)` | a clipped viewport; drag and flick scroll its children |
+| `surfer.sprite(img, x, y)` | an image on screen |
+| `surfer.filmstrip(img, frame_w, frame_h, x, y)` | an animation |
+| `surfer.layer(img, x, y, view_w)` | a wrapping, scrolling window onto a wide image |
 
-Every node has:
+A `font` is a name (`"ui28"`, `"mono16"`; `surfer.fonts()` lists them), a
+`Font` object, or a registry index. The `FONT_UI16`, `FONT_UI28` and
+`FONT_MONO16` constants are those names.
+
+Every node:
 
 ```python
-n.x_pos, n.y_pos     # position in the parent (read/write; writes damage + repaint)
-n.w, n.h             # size (read-only)
-n.hidden = True      # hide/show the subtree (write)
-n.add(child)         # parent a node or widget under this node
-n.detach()           # remove from the tree, keep all state — the app-switcher primitive
-n.destroy()          # detach + free the subtree
+n.x_pos, n.y_pos     # position in the parent: integers, read/write
+n.w, n.h             # size, read only
+n.hidden = True      # hide the subtree (write only)
+n.add(child)         # a node or a widget
+n.detach()           # out of the tree, all state kept
+n.destroy()          # detach and free the subtree
+n.damage()           # force a repaint (after you drew into its image)
+n.hits(other)        # collision, see below
+n.on_touch = fn      # fn(phase, x, y), screen coordinates; phase TOUCH_DOWN/MOVE/UP
 ```
 
-Type-specific methods (error on the wrong node type):
+`detach()` and `add()` round-trip losslessly, which is how a host swaps
+whole screens.
+
+Per type:
 
 ```python
-label.set_text("new text")
-label.set_wrap(120)                     # wrap box width (0 = single line)
-label.set_align(surfer.ALIGN_CENTER)    # ALIGN_LEFT / CENTER / RIGHT
+label.set_text("new text")          # also textinput / textarea
+label.set_wrap(120)                 # wrap width in pixels (0 = one line)
+label.set_align(surfer.ALIGN_CENTER)   # ALIGN_LEFT / CENTER / RIGHT
 rect.set_color(surfer.rgb(230, 150, 60))
 
-grid.set_row(row, "text")               # fill a row, space-padded, default colors
-grid.set_cell(col, row, "A", fg, bg)    # one cell; char or codepoint int
-grid.grid_scroll(rows)                  # +n scrolls content up, blanks exposed rows
+group.set_clip(w, h)                # give a group a size: it clips, and can be tapped
 
-sv.scroll_to(x, y)                      # programmatic scroll (clamped)
+grid.set_row(row, "text")           # a whole row, space-padded
+grid.set_cell(col, row, "A", fg=0xffff, bg=0)   # one cell; a character or a codepoint
+grid.set_cells(col, row, "a run", fg=0xffff, bg=0)
+grid.set_colors(fg, bg)             # the default colours
+grid.grid_scroll(rows)              # +n scrolls content up
+grid.scrollback(mult)               # keep mult screens of history -> bool
+grid.view([n]), grid.history()      # how far back the view is / how much there is
+
+sv.scroll_to(x, y)                  # clamped
+sv.scroll_offset()                  # -> (x, y)
+
+layer.set_offset(px)                # float pixels; wraps at the image width
+n.fast_scroll(True)                 # layer, sprite, scrollview, textgrid: see Layers
 ```
 
-`detach()` + `screen().add(...)` round-trips losslessly — an app's whole
-UI is one group that a switcher detaches and reattaches.
+**A handler goes on the topmost node you tap, then walks up its
+parents.** A handler on a background rect never sees a tap that lands on
+a label drawn over it; put it on a group containing both. A scrollview
+steals a child's gesture after 8 px of travel, so act on TOUCH_UP near
+the TOUCH_DOWN point for a tap.
 
-**Custom widgets** hang off any node's touch handler:
+**Collision:** `a.hits(b)` compares the two boxes, then (for sprites and
+filmstrips) the pixels: transparent pixels don't collide. Hidden or
+detached nodes never hit. If `a` has [hitboxes](#hitboxes), the answer is
+a tuple of which of `a`'s boxes hit (empty means no).
+
+## Images and sprites
 
 ```python
-pad = surfer.rect(x, y, 34, 44, color)
-pad.on_touch = lambda phase, tx, ty: ...   # TOUCH_DOWN / MOVE / UP, screen coords
+img = surfer.image(open("ship.png", "rb").read())   # decode PNG bytes
+img = surfer.image(png_bytes, True)       # ...as an A8 mask (alpha only)
+img = surfer.image_new(w, h)              # blank RGB565, black
+img = surfer.image_new(w, h, True)        # blank ARGB, transparent
+img = surfer.image_new(w, h, surfer.A8)   # blank mask
+img = surfer.image_new(w, h, fmt, True)   # ...in fast internal RAM if there is some
+img.w, img.h, img.format, img.stride
+img.tint = surfer.rgb(255, 40, 200)       # an A8 image's colour
+img.destroy()                             # after every sprite using it is gone
+surfer.image_scale(dst, src)              # scale src to fill dst -> True if hardware did it
 ```
 
-The node captures the gesture DOWN→UP like any widget; an enclosing
-scrollview can still steal it after 8 px of travel (act on UP near the
-DOWN point for tap semantics — see the step pads in
-[examples/gamma9001.py](../bindings/surfer/examples/gamma9001.py)).
-
-## Images & sprites
-
-Load a PNG at runtime (any size, alpha channel respected) and put it on
-screen as a sprite:
+Decode images at load time, not per frame. An image is not freed when
+Python drops it: `destroy()` it, and only after the nodes showing it are
+gone.
 
 ```python
-img = surfer.image(open("ship.png", "rb").read())   # bytes in → Image
-img.w, img.h          # decoded size (read-only)
-img.destroy()         # free the pixels — only after every sprite using it is gone
-
-# Amiga-style color cycling — a one-entry hardware palette. a8=True keeps
-# only the PNG's alpha channel; the mask draws in .tint (rgb565), which
-# the P4's PPA applies at blend time. Retint + damage() per frame costs
-# the same as drawing the sprite once — no pixels are recomputed.
-# `import pulse` is the demo: 22 masks cycling at a locked 62 fps.
-mask = surfer.image(png_bytes, True)
-mask.tint = surfer.rgb(255, 40, 200)
-spr = surfer.sprite(mask, x, y)
-spr.damage()          # content changed in place: force a repaint
-
 s = surfer.sprite(img, x, y)
 screen.add(s)
-s.x_pos = 300         # move it: the compositor repaints whatever it uncovers —
-                      # nothing under the sprite needs manual redrawing
-s.scale = 1.5         # uniform scale, 1/16 .. 16 (float; the PPA SRM range)
-s.rot = 90            # rotation in degrees CCW — multiples of 90 only
-                      # (the ESP32-P4's SRM engine rotates in quarter turns)
-s.mirror_x = True     # flip horizontally (walk left with right-facing art);
-s.mirror_y = True     # flips apply to the source before rotation
-s.w, s.h              # the transformed on-screen footprint
-
-s.set_src(x, y, w, h) # the camera primitive: show a window of a big image
-s.fast_scroll(True)   # ...and pan it as one DMA band shift per frame —
-                      # bake a whole game world with image_new/blit, then
-                      # pan a screen-sized src over it (call set_src every
-                      # frame; overlay sprites must be later siblings).
-                      # Measured on the P4: forest walking went 20 -> 240
-                      # fps compute rate this way.
-
-s.set_image(other)    # SHOW A DIFFERENT PICTURE on the same node — the
-                      # slime that just died, without destroying its
-                      # sprite and building another in its place. The
-                      # src window resets to the new picture whole and
-                      # `w`/`h` follow; scale, rot, mirror, hitboxes and
-                      # fast_scroll stay, because they are the NODE's.
+s.x_pos = 300         # the compositor repaints whatever it uncovers
+s.scale = 1.5         # 1/16 .. 16
+s.rot = 90            # degrees, multiples of 90 only
+s.mirror_x = True     # mirrors apply before rotation
+s.mirror_y = True
+s.w, s.h              # the transformed footprint
+s.set_src(x, y, w, h) # show one window of a big image (a sprite sheet cell, or a camera)
+s.set_image(other)    # show a different picture on the same node
 ```
 
-Two pictures somebody baked side by side in one image are still cheaper —
-`set_src` picks a cell with no second decode and no second allocation, and
-that is how the widgets, a card deck and an icon set are all drawn.
-`set_image` is for the rest: two files, two sizes, or an image rendered at
-runtime.
+`scale`, `rot` and the mirrors raise on anything but a sprite or
+filmstrip. `set_image` resets the window to the whole new picture and
+keeps the node's scale, rotation, mirror and hitboxes.
 
+**A8 masks** are a one-colour silhouette. Change `img.tint` and
+`damage()` the sprite: every sprite showing that image recolours, and it
+costs one repaint (on the P4 the tint is applied in hardware).
 
-## Filmstrips (animation)
+### Filmstrips
 
-An animation is one image with uniform frames laid out left to right —
-which is what the widgets have always been drawn from, and is now
-reachable from Python:
+An animation is one image of frames, left to right (and row by row for a
+grid):
 
 ```python
 strip = surfer.image(open("walk.png", "rb").read())
-f = surfer.filmstrip(strip, 64, 48, x, y)   # image, frame w, frame h, x, y
-screen.add(f)
-f.w, f.h              # ONE FRAME (64x48), not the whole sheet
-f.frame = 2           # pick a cel; clamped to the last one
-f.fps = 12.0          # ...or play it: advances from tick() and wraps
-f.fps = 0             # back to manual — what a cel EDITOR wants
+f = surfer.filmstrip(strip, 64, 48, x, y)   # frame w, frame h
+f.w, f.h              # one frame
+f.frame = 2           # pick a frame
+f.fps = 12.0          # play at 12 fps; 0 means you set .frame yourself
+f.play([fps])         # start (optionally at a new speed)
+f.stop()              # freeze, keeping fps
+f.playing
 ```
 
-`set_image` works here too and keeps the **cel size**, recounting the
-frames from the new strip — so trading a walk cycle for a death cycle at
-the same size is one call, and the fps and the transport carry over. A
-strip too small to hold one frame is refused rather than left drawing
-from nowhere.
+Late frames are dropped, not replayed. `set_image` keeps the frame size
+and recounts the frames.
 
-`fps` 0 is the default and hands the frame to the caller, which is also
-what a game stepping a walk cycle off its own physics wants. A playing
-strip costs nothing when nothing is playing (the per-tick scan is
-skipped entirely at a count of zero), and **late frames are dropped
-rather than replayed** — a tab hidden for a minute must not flip through
-thousands of cels to catch up.
+### Drawing into an image
 
-## Saving an image
+At load time, not per frame. A **paint** is a colour, `(colour, alpha)`,
+or a gradient `((x0, y0, c0[, a0]), (x1, y1, c1[, a1]))`.
+
+```python
+g = surfer.image_new(512, 300)
+g.fill(color)                                   # the whole image, opaque
+g.fill(color, x, y, w, h)                       # a rectangle of it
+g.poly([(0, 300), (256, 20), (512, 300)], paint)   # filled, anti-aliased
+g.line(x0, y0, x1, y1, paint, width=1)          # round caps
+g.lines([(0, 0), (40, 80), (90, 20)], paint, width=1)
+g.circle(cx, cy, r, paint, width=0)             # 0: filled
+g.ellipse(cx, cy, rx, ry, paint, width=0)
+g.bezier([p0, c, p1], paint, width=2)           # 3 points: quadratic
+g.bezier([p0, c0, c1, p1], paint, width=2)      # 4 points: cubic
+g.blit(src, x, y, rot=0)                        # composite src; rot in quarter turns
+```
+
+### Your own pixels
+
+An image supports the buffer protocol:
+
+```python
+mv = memoryview(img)          # img.stride bytes a row; format 0 RGB565, 1 ARGB, 2 A8
+...                           # write pixels
+img.flush()                   # publish them to the hardware (a no-op where the CPU draws)
+sprite.damage()               # and repaint what shows them
+```
+
+Forget `flush()` and the desktop is perfect while the P4 tears.
+
+### Saving and capturing
 
 ```python
 open("out.png", "wb").write(surfer.write_png(img))
+shot = surfer.fb_image()                  # the screen as an Image (a copy)
+shot = surfer.fb_image(0, 0, 320, 240)    # ...a region
+surfer.fb_read(x, y, w, h)                # a region as RGB888 bytes
+surfer.screenshot(path)                   # a PPM file (desktop and web only)
 ```
 
-The other half of `surfer.image()`. An image can be drawn into — by the
-shape API, or by writing its own pixels through the buffer above — and
-until this there was no way to get one back out, so anything that made a
-picture could show it and never keep it.
+`write_png(fb_image())` is a PNG screenshot on every port. An A8 image
+saves as white with its alpha.
 
-It is C rather than a few lines of Python because that was measured:
-the same encoder in MicroPython costs 8 ms for a 320x48 strip on a
-*desktop* (0.51 ms here) and 43 ms for 704x64 (1.52 ms here), against a
-device that runs Python-heavy loops 20-60x slower again. And it does not
-merely get slow — the Python path has to build the whole raw image as
-one bytearray before deflating, which for a 2556x284 sheet is 2.9 MB and
-raises MemoryError on a laptop, let alone a panel.
+## Layers
 
-An A8 image encodes as white with that alpha, since an A8 image is a
-mask whose colour lives in the node's `tint`.
-
-`img.blit(src, x, y, rot=0)` also takes quarter-turn rotations, so
-rotated props (a fallen tree is a standing one at rot 90) bake into the
-world at load time and the frame path stays untransformed.
-
-Taking bytes (not a path) is deliberate: the same code works from a
-unix file, the P4's flash VFS, or assets frozen into a web build (see
-`tools/pngwrap.py`, which bakes PNGs into an importable module).
-
-A PNG with no transparent pixels draws on the fast opaque path
-automatically. At `scale == 1.0, rot == 0` a sprite composites exactly
-like any other node; transformed sprites go through the hal's
-scale/rotate op (PPA SRM + blend on device, ~200–400 µs per sprite per
-damaged frame — dozens per frame are fine).
-
-Sprites keep a reference to their `Image`, so the GC won't collect
-pixels that are still on screen. Sprite-sheet sub-rect animation
-isn’t exposed yet.
-
-The full demo is [examples/space.py](../bindings/surfer/examples/space.py)
-(`import space` from the REPL): draggable ship, tumbling meteors at
-mixed scales, autofiring lasers — Kenney CC0 art from
-[assets/kenney/](../assets/kenney/).
-
-## Layers (scrolling backgrounds & tile maps)
-
-For parallax backgrounds and tile maps, bake your tiles into ONE wide
-strip per layer at load time, then scroll the strip as a `layer` node —
-the frame path pays one blit per layer instead of one per tile:
+For scrolling backgrounds, bake the tiles into one wide image at load
+time and scroll it as a layer: one blit per frame instead of one per
+tile.
 
 ```python
-strip = surfer.image_new(2048, 128)          # opaque; alpha=True for ARGB
-strip.fill(surfer.rgb(92, 148, 218))         # also: fill(c, x, y, w, h)
+strip = surfer.image_new(2048, 128)
+strip.fill(surfer.rgb(92, 148, 218))
 tile = surfer.image(open("grass.png", "rb").read())
 for x in range(0, 2048, 64):
-    strip.blit(tile, x, 0)                   # load-time composition (CPU)
+    strip.blit(tile, x, 0)
 tile.destroy()
 
-l = surfer.layer(strip, 0, y, 1024)          # strip, x, y, on-screen width
+l = surfer.layer(strip, 0, y, 1024)
 screen.add(l)
 l.fast_scroll(True)
-l.set_offset(px)                             # float pixels; wraps at strip.w
+l.set_offset(px)              # wraps at the image width
 ```
 
-`set_offset` wraps automatically — no two-sprite tricks. With
-`fast_scroll(True)` (needs an opaque strip; on the P4, triple-buffer
-mode) per-frame motion becomes one DMA band copy plus a sliver repaint
-instead of a full recompose: measured on the P4, a full-screen
-three-layer parallax scene is **19 fps naive vs 63–65 fps with fast
-layers**. Rules: fast layers must not overlap each other (stack them in
-disjoint horizontal bands), and anything drawn on top of a fast layer
-(the player sprite) must be a LATER SIBLING in the same parent — the
-layer damages overlays as it shifts. Sub-pixel offsets are free; a
-layer that stops moving repaints its band once.
+With `fast_scroll(True)` (an opaque image) each frame's motion is one
+hardware band shift plus a thin repaint. Fast layers must not overlap
+each other, and anything drawn over one should be a later sibling. When
+sprites move over a fast layer, call `set_offset` first, then move the
+sprites.
 
-The full demo is
-[examples/parallax.py](../bindings/surfer/examples/parallax.py)
-(`import parallax` from the REPL): sky, mountains and ground bands at
-0.1x/0.5x/1x with a bobbing ship, printing fps once a second.
+`sprite.fast_scroll(True)` does the same for a sprite whose `set_src`
+window pans across a big opaque image (a game camera over a baked
+world).
 
-## Shapes — draw the asset, then sprite it
-
-All shape calls rasterize INTO an image at load time (anti-aliased,
-never per frame). Paints are an rgb565 int, `(color, alpha)`, or a
-linear gradient `((x0, y0, c0[, a0]), (x1, y1, c1[, a1]))` between two
-stops. `surfer.image_new(w, h, surfer.A8)` makes a tintable mask —
-shapes drawn there recolor by `.tint` (see color cycling above).
+## Opacity, fades and tweens
 
 ```python
-g = surfer.image_new(512, 300)                       # opaque 565 canvas
-g.poly([(0,300), (256,20), (512,300)],               # gradient triangle
-       ((0,300, surfer.rgb(78,54,38)), (256,20, surfer.rgb(172,124,74))))
-g.line(10, 10, 500, 40, color, 3)                    # width 3, round caps
-g.lines([(0,0), (40,80), (90,20)], color, 5)         # polyline, round joins
-g.circle(60, 60, 25, color)                          # filled
-g.circle(60, 60, 25, color, 4)                       # 4px outline
-g.ellipse(cx, cy, rx, ry, color[, width])
-g.bezier([(0,90), (50,0), (100,90)], color, 4)       # 3 pts quadratic
-g.bezier([p0, c0, c1, p1], color, 4)                 # 4 pts cubic
+n.opacity = 0.4          # 0..1; sprite, filmstrip, layer, label
+n.fade_out(ms=250)
+n.fade_in(ms=250)
+n.fade_to(0.4, ms=250)
+n.fade_cancel()
+n.fading
+
+n.tween("x_pos", 300, 1000, ease="out")    # prop, to, ms=250, ease=None, start=None
+n.tween_cancel("x_pos")                    # or no argument: all
+n.tweening("x_pos")                        # or no argument: any
 ```
 
-Order matters when overlays move over a fast-scrolling layer: call the
-layer's `set_offset` FIRST, then write the overlay positions. The layer
-heals the smear under each overlay where it sits at `set_offset` time —
-move-then-shift leaves a trail of ghost slivers behind fast movers.
+Tweenable: `"x_pos"`, `"y_pos"`, `"scale"`, `"opacity"`. Eases:
+`"linear"` (default), `"in"`, `"out"`, `"in_out"`. Several tweens can run
+on one node; setting a property directly cancels only that property's
+tween. A group, rect or textgrid cannot fade and raises. Opacity is
+visual only: taps and `hits()` ignore it.
 
-`import parallax` shows the combination: every mountain is gradient
-polys (no art), and the volcanoes' lava veins are bezier strokes in A8
-masks with cycling tints. Keep tint-cycled overlay masks CROPPED to
-their ink when they ride a fast-scrolling layer — a moving overlay
-re-blends its whole bbox every frame (DESIGN.md §5).
+## Hitboxes
+
+A sprite or filmstrip can carry up to 32 collision boxes, which follow
+its scale, mirror and rotation.
+
+```python
+hb = s.hitboxes.add(0, 8, 8, 8)       # x, y, w, h in the unrotated picture -> a Hitbox
+len(s.hitboxes); s.hitboxes[0]; s.hitboxes.clear()
+hb.x, hb.y, hb.w, hb.h                # read/write
+hb.index                              # what hits() reports it as
+hb.visible = True                     # draw its outline (for debugging)
+hb.visible_color = surfer.rgb(0, 255, 0)
+hb.remove()                           # later boxes shift down
+```
+
+While a node has hitboxes they are its collision shape; the other node's
+pixels still count.
+
+## Text
+
+```python
+surfer.fonts()                 # every face's name
+surfer.fonts(True)             # the monospace ones
+f = surfer.font("mono16")      # a name, or TTF-baked bytes
+f.cell_w, f.cell_h             # a mono face's cell
+f.codepoints()                 # every character it has
+surfer.widget_font("ui12")     # the face widgets are built with, from now on
+surfer.widget_font()           # -> its name
+surfer.emoji("fire")           # the character: it goes in any label or grid
+surfer.emoji()                 # every name
+img = surfer.text_image(s, color, font="ui12", wrap_w=0)   # text baked into an ARGB image
+```
+
+A label can't scale; `text_image` on a sprite can. Emoji are a fallback
+face: any codepoint the text face lacks is looked up in the colour emoji
+set. An emoji takes two cells in a textgrid (`set_row` allows for that;
+`set_cells` doesn't).
+
+### Editing text
+
+A textinput or textarea draws the text and a caret, nothing else, and
+**has no keyboard of its own**: feed it keys.
+
+```python
+ti = surfer.textinput(x, y, 240)
+ti.text, ti.caret            # read/write
+ti.focus(True)
+ti.mask = "*"                # a password field; None shows the text
+for k in surfer.keys():
+    if not ti.key(k):        # False when it didn't use the key
+        ...                  # Enter (in a one-line field) and hotkeys fall through
+ti.insert(s); ti.backspace(); ti.delete(); ti.move(delta, extend=False)
+ti.index_from_x(x)
+
+ta = surfer.textarea(x, y, 400, 5)
+ta.rows, ta.lines            # lines shown / lines the text takes
+ta.scroll_y                  # read/write
+```
+
+A tap places the caret and a drag selects. `key()` refuses Tab.
 
 ## Widgets
 
-Prebuilt controls with the default baked theme. Factories (also available
-capitalized: `surfer.Slider` is `surfer.slider`):
+Prebuilt controls. They report through `.callback` and hold `.value`;
+**setting `.value` from code does not fire the callback**. A widget must
+be added to a node before it draws.
 
-| factory | value type |
-|---|---|
-| `surfer.slider(x, y, w=48, h=330)` | `float` 0.0–1.0 |
-| `surfer.knob(x, y, size=64)` | `float` 0.0–1.0 (vertical drag, DAW-style; `size < 52` picks the small 40px style) |
-| `surfer.checkbox(x, y)` | `bool` |
-| `surfer.dropdown(x, y, w, ["a", "b", ...])` | `int` selected index |
-| `surfer.button(x, y, w, h, label="")` | none — `.callback` fires on release inside; `.label = "..."` relabels |
+| factory | `.value` | callback gets |
+|---|---|---|
+| `slider(x, y, w=48, h=330)` | 0.0-1.0 | float |
+| `knob(x, y, size=64)` | 0.0-1.0 | float |
+| `checkbox(x, y)` | bool | bool |
+| `dropdown(x, y, w, ["a", "b"])` | index | int |
+| `button(x, y, w, h, label="")` | None | True, on release |
+| `selector(x, y, positions)` | index | int |
+| `radio(x, y, labels, vertical=True)` | index | int |
+| `tabs(x, y, w, h, labels, tab_h=36, face, dim, text, text_active)` | index | int |
+| `colorpicker(x, y, size)` | colour | int |
+| `scrollbar(x, y, len, vertical=True)` | position | int |
+| `led(x, y, color=red)` | brightness 0..1 (or bool) | never called |
 
-Every widget has the node position attributes plus:
+- **slider**: wider than tall is horizontal. Under 30 px across it uses
+  compact art.
+- **knob**: vertical drag. `size` picks between a 40 px knob (size < 52)
+  and a 64 px one. `kn.on_tap = fn(where)` handles a tap, 0..1 down the
+  knob.
+- **selector**: a knob with N detents; a tap advances one.
+- **scrollbar**: `sb.set_range(total, visible, pos=0)` in your own unit;
+  it hides itself when there is nothing to scroll.
+- **tabs**: `h` includes the strip. `t.page(i)` is a group to fill; the
+  widget shows one page at a time. `t.set_label(i, s)`,
+  `t.set_face(i, c)`, `t.set_dim(i, c)`. Give `face` your page's
+  background colour so the tab and page read as one.
+- **radio**: `False` for a row.
+
+Every widget:
 
 ```python
-w.value              # read/write, in the natural type above
-w.callback = fn      # called on user interaction with the new value
-                     # (slider/knob: float, checkbox: bool, dropdown: int)
-w.node               # the widget's root Node, for tree operations
+w.value; w.callback = fn
+w.node                 # its root Node, for tree operations
+w.x_pos, w.y_pos, w.w, w.h
+w.hidden = True
 w.detach()
+w.color = c            # led, knob, selector, slider cap, tabs
+b.label = "new"        # button (write only)
 ```
 
-Setting `.value` programmatically does **not** fire the callback — only
-user interaction does. A widget must be parented (`screen.add(w)` /
-`node.add(w)`) before it renders.
+Inside a scrollview, slider and knob drags always win; taps on the
+others yield to scrolling after 8 px. Capitalised aliases exist for
+`Group`, `TextInput`, `Slider`, `Knob`, `Checkbox`, `Dropdown`, `Button`,
+`Led`, `Selector`, `ColorPicker`.
+
+## Input
 
 ```python
-s = surfer.slider(700, 140)
-screen.add(s)
-s.callback = lambda v: synth.set("cutoff", v)
+for kind, text, shift, ctrl in surfer.keys():   # drain every frame
+    ...
+surfer.keys_held()           # ((kind, text), ...): keys down now, up to 8, for games
+surfer.wheel()               # [(x, y, dx, dy), ...]: wheel moves no scrollview took
+surfer.touches()             # ((id, x, y), ...): every finger, ids stable while held
+surfer.has_touch()
+surfer.screen_keyboard([show])   # the on-screen keyboard where there is one; None elsewhere
 ```
 
-Inside a `scrollview`, slider and knob drags always win; taps on
-checkboxes and dropdowns yield to scrolling after 8 px of travel.
+`kind` is `KEY_TEXT` (then `text` holds the characters; Tab is `"\t"`)
+or one of `KEY_LEFT RIGHT UP DOWN PGUP PGDN HOME END BACKSPACE DELETE
+ENTER ESC`.
+
+**ctrl+letter arrives as its control character** in `KEY_TEXT` (`^S` is
+`"\x13"`) with `ctrl` False. `^C` is the interrupt and never arrives;
+`^A` and `^E` arrive as Home and End. The `ctrl` flag is for keys with no
+control character: ctrl+arrows, ctrl+Home/End, ctrl+PgUp/PgDn,
+ctrl+Delete.
+
+Use `keys()` for typing and `keys_held()` for steering. `wheel()` is the
+desktop's second finger: a trackpad's two-finger gesture arrives as a
+wheel, never as touches.
+
+## Controllers
+
+`surfer.pad(n)` is one normalised controller, whatever feeds it. Slots
+0..3.
+
+```python
+pad = surfer.pad(0)
+pad.up, pad.down, pad.left, pad.right
+pad.a, pad.b, pad.x, pad.y, pad.l, pad.r, pad.start, pad.select
+pad.lx, pad.ly, pad.rx, pad.ry        # sticks, -1.0..1.0
+pad.dpad, pad.buttons                 # bitmasks
+surfer.pad_keys(0)                    # the slot the keyboard drives; -1: none
+```
+
+The keyboard map: arrows or WASD are the d-pad, space or Z is A, X is B,
+C is X, V is Y, Q and E are L and R. A gamepad and the keyboard feed the
+same slot and merge, so a game works with either.
+
+A driver, an on-screen pad or a test writes the pad:
+
+```python
+pad.set_dpad(surfer.DPAD_UP | surfer.DPAD_LEFT)
+pad.set_buttons(surfer.BTN_A | surfer.BTN_R)
+pad.set_stick(0, 0.2, -0.9)          # stick 0 or 1, x, y
+pad.reset()
+```
+
+## 3D models
+
+```python
+m = surfer.mesh(glb_bytes, tex_png=None, textured=False)
+m.render(img, rx, ry, rz, size, cx=img.w/2, cy=img.h/2, cull=None)
+m.tris
+m.destroy()
+```
+
+Renders a low-poly glTF (.glb) into an RGB565 or ARGB image with a
+z-buffer and flat shading: `size` is the model's radius in pixels,
+`rx/ry/rz` are degrees. Render small and scale the sprite up. `render`
+doesn't flush: call `img.flush()` and damage the sprite. `textured=True`
+samples the texture per pixel, for models with painted detail.
 
 ## Constants
 
 ```python
-surfer.FONT_UI16   surfer.FONT_UI28   surfer.FONT_MONO16
-
-surfer.KEY_TEXT    surfer.KEY_LEFT    surfer.KEY_RIGHT   surfer.KEY_UP
-surfer.KEY_DOWN    surfer.KEY_PGUP    surfer.KEY_PGDN    surfer.KEY_HOME
-surfer.KEY_END     surfer.KEY_BACKSPACE  surfer.KEY_DELETE  surfer.KEY_ENTER
-
+surfer.KEY_TEXT ... surfer.KEY_ESC
 surfer.TOUCH_DOWN  surfer.TOUCH_MOVE  surfer.TOUCH_UP
+surfer.ALIGN_LEFT  surfer.ALIGN_CENTER  surfer.ALIGN_RIGHT
+surfer.A8
+surfer.DPAD_UP  DPAD_DOWN  DPAD_LEFT  DPAD_RIGHT
+surfer.BTN_A  BTN_B  BTN_X  BTN_Y  BTN_L  BTN_R  BTN_START  BTN_SELECT
+surfer.FONT_UI16  FONT_UI28  FONT_MONO16    # the names "ui16", "ui28", "mono16"
 ```
 
-`surfer.frame_rate(fps)` is game mode: it locks `surfer.tick()` to the
-nearest divisor of the panel's measured refresh rate and returns the
-actual locked fps — early frames wait for the vsync boundary, late
-frames slip whole refresh periods, so motion stays quantized to the
-panel instead of wobbling with scene load. A steady half-rate plays
-better than a 45-70 swing; pick the rate your worst frame always fits.
-`frame_rate(0)` (the default) uncaps and returns the panel rate. Note
-the P4 bench panel actually refreshes at 69.7 Hz — `frame_rate(30)`
-locks 34.8 there; scale per-frame speeds by the return value if world
-speed matters. Locked demos: forest (full rate), parallax (half rate).
-
-`a.hits(b)` tests whether two nodes' on-screen footprints overlap
-(axis-aligned box test on absolute position and w/h; transformed
-sprites use their transformed footprint). It's the collision primitive
-— cheap enough to test every bullet against every enemy every frame.
-Returns False if either node is hidden or detached. parallax uses it
-for shot-vs-UFO: a hit spawns a scaling fireball (an ARGB explosion
-image animated by `.scale` — color art scales in hardware) and hides
-both nodes.
-
-`surfer.cpu()` returns busy-percent per core since the last call — two
-entries on the P4 (MicroPython runs on core 1), one process-wide entry
-on desktop, empty on web. Poll it about once a second next to an fps
-meter; parallax draws both: `34 fps (35)` (measured + lock target) with
-`cpu 41% / 12%` beneath.
-
-## Controllers
-
-`surfer.pad(n)` is the game-input layer: one normalized controller
-whatever the hardware. A **source** feeds it (the built-in keyboard
-map, a USB/i2c gamepad driver, an on-screen touch pad) and a **game**
-reads it, and the game never learns which source it was. Slots `n` are
-0..3 for local multiplayer.
+## Test hooks
 
 ```python
-pad = surfer.pad(0)          # make once, read every frame
-# dpad / hat (8-way = two true at once):
-pad.up  pad.down  pad.left  pad.right
-# face + shoulder buttons:
-pad.a  pad.b  pad.x  pad.y  pad.l  pad.r  pad.start  pad.select
-# two analog sticks, each -1.0..1.0:
-pad.lx  pad.ly   pad.rx  pad.ry
+surfer._touch(x, y, phase, id=0)          # a synthetic touch
+surfer._key(kind, text="", shift=False, ctrl=False)
+surfer._wheel(x, y, dx, dy)
 ```
 
-The keyboard is wired to a slot for free — `surfer.pad_keys(0)` (the
-default; `-1` turns it off). Arrows or WASD drive the dpad, space or Z
-is A, X/C/V are B/X/Y, Q/E are the shoulders. A USB gamepad driver
-feeds the same slot, and the two **merge** — the pad's digital controls
-have two source channels that reads OR together (gamepad = source 0,
-keyboard = source 1), so with both plugged in either one drives the
-pad, neither clobbering the other. A game reading `pad` therefore works
-on the keyboard or a controller with no change. parallax is the
-reference: analog stick gives proportional thrust, dpad/keyboard reads
-as full deflection, and either input flies it.
+They go through the same paths real input does.
 
-Writing a **source** (a driver, the touch overlay, a test) uses the
-same handle:
+## repl.py
 
-```python
-pad.set_dpad(surfer.DPAD_UP | surfer.DPAD_LEFT)   # replaces the hat
-pad.set_buttons(surfer.BTN_A | surfer.BTN_R)      # replaces all buttons
-pad.set_stick(0, 0.2, -0.9)                       # stick 0, x, y floats
-pad.reset()                                        # neutral (unplugged)
-```
+`bindings/surfer/repl.py` is a REPL shell on top:
 
-Each `set_*` replaces the whole field, which is what a driver holding a
-full HID report wants; a keyboard mapper assembles the bits then calls
-once. (Hardware drivers — USB HID parsing, i2c polling — live above
-surfer, in the port / host layer; surfer owns only this abstract
-layer.)
-
-`surfer.keys_held()` returns the keys currently held down — state, not
-events, up to 8 at once. Poll it every frame for game controls: it has
-no repeat delay, and it's what lets a ship thrust and fire at the same
-time (the parallax flight model — velocity + drag from held arrows —
-is the reference). Use `keys()` for typing, `keys_held()` for driving;
-call `keys()` once per frame anyway to drain the event queue.
-
-Key events from `surfer.keys()` are `(kind, text, shift, ctrl)`; `text`
-holds the typed characters when `kind == KEY_TEXT`, else `""`.
-
-`shift` and `ctrl` are the modifiers that could not be spelled any other
-way. **ctrl+LETTER never sets `ctrl`** — it arrives as `KEY_TEXT` holding
-its control character (^S is `"\x13"`), which is what a terminal puts on
-the wire and what every consumer already reads; reporting the flag as
-well would let one apply the modifier twice. The flag is for the keys
-with no such character: ctrl+Delete, ctrl+arrow, ctrl+Home/End,
-ctrl+PgUp/PgDn. Without it those are indistinguishable from the bare key,
-which is what they were until this existed.
-
-The tuple **was three elements** before `ctrl`. Unpack the full width or
-index — `kind, text, shift = k` raises.
-
-## The wheel
-
-```python
-for x, y, dx, dy in surfer.wheel():
-    if in_my_box(x, y):
-        zoom -= dy / 40.0
-```
-
-`surfer.wheel()` drains wheel and two-finger pushes **that no scrollview
-took**. The scrollviews under the pointer get first refusal — the same
-bargain touch makes, so a dialog's file list still scrolls while the
-same gesture over the app behind it arrives here — and what is left is
-the app's to interpret: zoom a picture, step a value, spin a knob.
-
-`dx`/`dy` are pixels of content movement, the direction a drag would
-have gone; `x`/`y` are framebuffer pixels, mapped exactly as a touch is.
-Drain it every frame, like `keys()`.
-
-**On a laptop this is the only two-finger gesture there is.** The SDL
-backend feeds `touches()` from `SDL_TOUCH_DEVICE_DIRECT` devices only —
-a trackpad is `INDIRECT_ABSOLUTE`, and taking it would inject a contact
-every time a palm rested on it — so a pinch cannot arrive on the desktop
-and a two-finger scroll can. Anything offering pinch-to-zoom on a panel
-should offer the wheel beside it.
-
-`surfer._wheel(x, y, dx, dy)` injects one through the normal path
-(`_touch`/`_key`'s counterpart), so a headless test finds out that a
-scrollview under the pointer eats it.
-
-## repl.py helpers
-
-`bindings/surfer/repl.py` layers a REPL shell on top:
-
-- **`UIScreen`** — holds live UI objects. `screen.add(el, x=None, y=None)`
-  positions and parents in one call and returns `el`; `screen.remove(el)`;
-  `screen.hide()` / `screen.present()` detach/reattach the whole layer.
-- **`Console`** — a terminal-lite on a textgrid: `write(str)` with wrap
-  and scroll.
-- **`Repl`** — line editing, history (↑/↓), `:`-block continuation,
-  tracebacks rendered on screen. `repl.feed("code\n")` scripts input.
+- **`UIScreen`**: `screen.add(el, x=None, y=None)` positions and parents
+  in one call and returns `el`; `screen.remove(el)`; `screen.hide()` /
+  `screen.present()`.
+- **`Console`**: text with wrap and scroll on a textgrid.
+- **`Repl`**: line editing, history, block continuation, tracebacks on
+  screen. `repl.feed("code\n")` scripts input.
 
 ## A complete program
 
 ```python
 import surfer
 
-surfer.init(800, 480)
+surfer.init(1024, 600)
 root = surfer.screen()
 
 panel = surfer.group(20, 20)
 root.add(panel)
-panel.add(surfer.label("mixer", 0, 0, surfer.rgb(240, 242, 248), surfer.FONT_UI28))
+panel.add(surfer.label("mixer", 0, 0, surfer.rgb(240, 242, 248), "ui28"))
 
-sliders = []
 for i, name in enumerate(["cutoff", "res", "env", "lfo"]):
     s = surfer.slider(i * 110, 60)
     s.callback = lambda v, n=name: print(n, "=", v)
     panel.add(s)
-    sliders.append(s)
 
 while surfer.tick():
     pass
 ```
+
+More: [examples/space.py](../bindings/surfer/examples/space.py) (sprites),
+[examples/parallax.py](../bindings/surfer/examples/parallax.py) (layers),
+[examples/gamma9001.py](../bindings/surfer/examples/gamma9001.py)
+(widgets in a scrollview).
