@@ -12,10 +12,17 @@
 #include "surfer_port.h"
 #include "hal_sdl.h"
 
+/* The window's title -- and, under emscripten, the page's: SDL sets
+ * document.title from it. A host that is not "surfer" names itself with
+ * -DSURFER_WINDOW_TITLE='"..."'. */
+#ifndef SURFER_WINDOW_TITLE
+#define SURFER_WINDOW_TITLE "surfer"
+#endif
+
 const surf_hal *surfer_port_init(int16_t w, int16_t h, bool single_buffer)
 {
     (void)single_buffer;  /* SDL owns presentation; nothing to choose */
-    const surf_hal *hal = surf_hal_sdl_init(w, h, "surfer");
+    const surf_hal *hal = surf_hal_sdl_init(w, h, SURFER_WINDOW_TITLE);
     /* the desktop's gamepad "driver": SDL's game-controller API feeds the
      * same abstract pad the device's USB driver does */
     SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER);
