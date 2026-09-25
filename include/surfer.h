@@ -350,7 +350,7 @@ typedef enum {
     SURFER_KEY_BACKSPACE, SURFER_KEY_DELETE, SURFER_KEY_ENTER,
     /* Esc is a KEY, not text. It used to close the desktop window from
      * inside the SDL pump -- convenient for a C demo, catastrophic for a
-     * host: on tulip5 one Esc took down the machine, every running app
+     * host: on tulip2 one Esc took down the machine, every running app
      * and anything unsaved, from a key people press to mean "cancel
      * what I just started". A host that wants it to quit can do that
      * itself now, and one that wants to CANCEL something can have it. */
@@ -419,7 +419,7 @@ void surf_pad_set_axis(int pad, int stick, int axis, int32_t val_q16);
 void surf_pad_reset(int pad);       /* neutral (a source disconnected) */
 void surf_pad_reset_all(void);
 
-/* Host chrome drawn OUTSIDE the machine's screen (tulip5's iOS key
+/* Host chrome drawn OUTSIDE the machine's screen (tulip2's iOS key
  * bar). chrome_q16 is the fraction of the window height it wants kept
  * clear at the bottom, Q16 — a FRACTION because the host measures in
  * its own space and SDL's window height need not agree; ctrl_latch is a

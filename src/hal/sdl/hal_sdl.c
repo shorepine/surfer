@@ -146,7 +146,7 @@ static void update_view(void)
          * room it needed and sat ON the machine's task bar. The
          * keyboard fix above learned the same lesson; this one cannot
          * relearn it, because there is no denominator left to get
-         * wrong. tulip5's iOS key bar (drivers/ios_bar.m) sets it. */
+         * wrong. tulip2's iOS key bar (drivers/ios_bar.m) sets it. */
         if (surf_host_chrome_q16 > 0) {
             int bar_px = (int)(((int64_t)oh * surf_host_chrome_q16) >> 16);
             if (bar_px > 0 && bar_px < avail_h)
@@ -1210,7 +1210,7 @@ bool surf_hal_sdl_pump(void)
             switch (e.key.keysym.scancode) {
             /* NOT `return false`. That closed the window from inside
              * the pump, which is a fine way for a C demo to exit and a
-             * terrible one for a host: on tulip5 it took down the REPL,
+             * terrible one for a host: on tulip2 it took down the REPL,
              * every running app and anything unsaved. Esc is a key; what
              * it MEANS is the host's business. The demos close on the
              * window button and on ctrl+C as they always could. */

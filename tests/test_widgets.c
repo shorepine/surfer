@@ -672,7 +672,7 @@ static int32_t tab_reported;
 static void tab_cb(int32_t v, void *user) { (void)user; tab_reported = v; }
 
 /* Does a rect of this colour reach the screen this frame? `hidden` is
- * write-only on a node — deliberately, and tulip5 leans on it — so the
+ * write-only on a node — deliberately, and tulip2 leans on it — so the
  * only honest way to ask "is that page showing" is to compose and see
  * what the hal was told to fill. */
 static bool filled(surf_color c)
@@ -825,7 +825,7 @@ static void test_radio(void)
 }
 
 /* A handler that destroys the tree it is in, DURING a scrollview's
- * gesture steal. tulip5's app launcher does exactly this: a row treats
+ * gesture steal. tulip2's app launcher does exactly this: a row treats
  * the synthetic UP as a tap, closes the popup, and the scrollview the
  * dispatch was about to capture is freed under it.
  *
@@ -855,7 +855,7 @@ static void doomed_row_touch(surf_node *n, const surf_touch *t, void *user)
          * pointer now calls THIS handler — observable, rather than
          * depending on what a recycled slot happens to contain. (In wasm
          * what it contained was a garbage function index and the whole
-         * VM trapped, which is how tulip5 found it.) */
+         * VM trapped, which is how tulip2 found it.) */
         for (int i = 0; i < 8; i++) {
             surf_node *ghost = surf_group_new(0, 0);
             surf_group_set_clip(ghost, 200, 20);

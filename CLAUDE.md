@@ -231,7 +231,7 @@ board. One code-level trap, not config: leave `bsp_display_config_t`'s
 `.phy_clk_src` at 0 — on IDF ≥ 5.5.3 `MIPI_DSI_PHY_CLK_SRC_DEFAULT` is a
 compat alias for the LEGACY PLL_F20M reference, illegal on v3.x, and the
 image compiles clean then abort()s inside `esp_lcd_new_dsi_bus` at boot
-with no message. Measured on tulip5's identical part: compose cost at
+with no message. Measured on tulip2's identical part: compose cost at
 large damaged areas fell 42–51% (wider PPA SRM block, 8×8 → 32×32); the
 ~85 µs per-op floor is unchanged, so "bake at final size" still holds.
 
@@ -246,7 +246,7 @@ within one compose, cells painted BEFORE an opaque blit on the same
 rows were dropped from cache before they reached memory, and memory
 kept what the forward copy had put there: the previous frame. On the
 glass that was a sprite leaving copies of itself along the launcher
-panel's edge in tulip5 — the erase of its old position, CPU-painted by
+panel's edge in tulip2 — the erase of its old position, CPU-painted by
 the console grid, discarded when the panel's skin was copied on those
 rows, and only outside the panel because the panel repainted the rest.
 Never on the SDL hal, and not the compositor's fault.
@@ -358,7 +358,7 @@ regressions live one per path (test_layer.c the layer and the sprite,
 test_scroll.c the scrollview, test_grid.c the textgrid), because these
 are four separate copies of one rule and always have been.
 
-tulip5 cannot reach any of this today — a backgrounded app's `frame()` is
+tulip2 cannot reach any of this today — a backgrounded app's `frame()` is
 never called, so nothing animates while hidden. It was fixed anyway
 because surfer is a general UI library and nothing stops a host from
 animating a hidden group; the cost of being wrong is the whole screen
@@ -487,7 +487,7 @@ approximation.
 
 **A REFUSAL RAISES.** `group.opacity = 0.5` is a TypeError naming what
 can fade and what to do instead, following `.rot`'s precedent three
-sections up — and for its reason, which is written down in tulip5's own
+sections up — and for its reason, which is written down in tulip2's own
 notes as an afternoon lost to a kitty that would not turn. A silent
 no-op on the wrong node type is the most expensive recurring bug in this
 codebase. Reads stay lenient and answer 1.0.
@@ -574,7 +574,7 @@ per curve, because an ease that arrives at 0.998 is a sprite that never
 quite gets there.
 
 **...AND A VALUE NO NODE CARRIES TWEENS IN PYTHON**, not here:
-`self.ui.tween(a, b, ms, fn)` in tulip5 walks a number and calls `fn(v)`,
+`self.ui.tween(a, b, ms, fn)` in tulip2 walks a number and calls `fn(v)`,
 on the app's own timers. The split is the one `after`/`every` already
 make against task.py — node properties run in C (free, no Python per
 frame, survives backgrounding), an app's own angle or volume runs in
@@ -593,7 +593,7 @@ spr.fading                 # is one running
 `surf_tick` drives it, beside the filmstrip's own advance and for the
 same reasons: the app writes one line and never touches it again, and
 the fade **keeps running through frames the app is not being called
-for** — so a tulip5 app backgrounded mid-fade comes back finished
+for** — so a tulip2 app backgrounded mid-fade comes back finished
 rather than frozen half way.
 
 **THE STATE IS A SIDE TABLE, NOT A FIELD ON THE NODE.** A tween is 16
@@ -606,7 +606,7 @@ one comparison when nothing is fading.
 
 **IT LIVES IN `node.c` AND NOT IN A `fade.c`, and that is a build fact
 rather than taste.** surfer's own Makefile globs `src/core/*.c`, so a new
-file is picked up for the desktop and the web — and **tulip5's
+file is picked up for the desktop and the web — and **tulip2's
 `micropython.cmake` LISTS the core sources by name**, so the same file
 would compile everywhere except the device and link with an undefined
 symbol at the very end of a ten-minute build. That is this repo's
@@ -864,7 +864,7 @@ every model rendering darker than the same file in a web viewer, and
 the tests/test_mesh.c white-face check pins the lifted value (r5 29,
 not the gamma-space 27) so it cannot quietly regress. Face normals are
 computed from the world-space triangles, so the NORMAL and TANGENT
-accessors are never read — which is also why tulip5's baker strips them
+accessors are never read — which is also why tulip2's baker strips them
 and halves the shipped bytes. COLOR_0 (float/u8/u16) works where a
 model has no texture; a texture referenced by URI (Kenney keeps one
 colormap.png beside its models) is supplied as `tex_png`. Everything
@@ -911,7 +911,7 @@ it arrives as `KEY_TEXT`. ctrl+Delete, ctrl+arrow, ctrl+Home/End and
 ctrl+PgUp/PgDn have no such character, so both drivers did the only thing
 they could and DROPPED the modifier — `chord = false; /* ctrl+arrow still
 arrows */` in the SDL hal, `break; /* ctrl+arrow etc: plain keys */` in
-tulip5's `usb_input.c`. Every one of those chords was therefore
+tulip2's `usb_input.c`. Every one of those chords was therefore
 indistinguishable from the bare key, which is how a Tulip user found it:
 tulip-pye binds delete-word to ctrl+Del and delete-line to shift+Del, and
 they are the only two entries in its keymap with no ^-chord alternative,
@@ -994,17 +994,17 @@ reach anything that reads the keyboard.
 
 **`KEY_ESC` is a key, not a window command.** The SDL pump used to
 `return false` on Escape, which closes the window — fine for a C demo,
-catastrophic for a host: on tulip5 one Esc took down the REPL, every
+catastrophic for a host: on tulip2 one Esc took down the REPL, every
 running app and anything unsaved, from the key people press to mean
 "cancel what I just started". It is queued like Home or End now and what
 it MEANS belongs to the host; the demos still close on the window button
 and on ctrl+C. The device path agrees by construction (HID usage 0x29 in
-tulip5's `usb_input.c`) — a chord that works on one platform and not the
+tulip2's `usb_input.c`) — a chord that works on one platform and not the
 other is the exact shape of the old ctrl+letter bug.
 
 ## LED and selector
 
-Two panel controls, added together for tulip5's TB-303.
+Two panel controls, added together for tulip2's TB-303.
 
 `surf_led` is the only widget that **reports nothing** — a lamp is an
 output, so it has no callback. The art is A8, and each LED keeps its own
@@ -1031,7 +1031,7 @@ with `.value` a brightness (or True/False) and an index respectively.
 ## Tabs, and the half a caller cannot do well
 
 `surf_tabs` is a strip of labelled buttons with a PAGE behind each, and
-the widget owns which page is showing. Added for tulip5's settings app,
+the widget owns which page is showing. Added for tulip2's settings app,
 which had four panels tiled into one screen and no room for a fifth.
 
 **Drawing the strip is the easy half.** What is not is what happens
@@ -1059,7 +1059,7 @@ fill and nothing else ever has to know it exists.
   underneath — and the copies are PER TAB now (a struct per tab per
   state, bytes and no pixels), so `surf_tabs_set_face_at` / `set_dim_at`
   dress one tab in its own pair. That is for a strip whose pages each
-  carry their own paper (tulip5's world app: grey files, blue chat,
+  carry their own paper (tulip2's world app: grey files, blue chat,
   green games): the bright face is that page's background, so the join
   rule holds on every page with nothing chasing the selection — and
   press feedback shows the colour you are about to get — while the dim
@@ -1159,7 +1159,7 @@ size it reports cannot change.
 ## Host chrome at BOTH ends
 
 `surf_host_chrome_q16` is how much of the window height a host wants
-kept clear at the bottom for chrome of its own (tulip5's iOS key bar);
+kept clear at the bottom for chrome of its own (tulip2's iOS key bar);
 `surf_host_chrome_top_q16` is the same at the top, which is a notch, an
 island or a status bar. Q16 fractions rather than points, because the
 host measures in its own coordinate space and SDL's window height does
@@ -1317,11 +1317,11 @@ caller can set the range unconditionally and the bar appears when there
 is somewhere to go. Both pieces are 9-patched capsules, so the ends stay
 round at any length and nothing is drawn at frame time.
 
-Three consumers in tulip5, deliberately in three different units: the
+Three consumers in tulip2, deliberately in three different units: the
 console (rows of scrollback), the editor (lines of a document), and
 gamma9001's sound chooser (pixels of scrollview offset).
 
-Two things the widget got wrong until tulip5's `widgets` demo put a
+Two things the widget got wrong until tulip2's `widgets` demo put a
 horizontal one on screen next to a vertical one:
 
 - **Horizontal needs its own art.** A 9-patch slices along fixed axes, so
@@ -1333,7 +1333,7 @@ horizontal one on screen next to a vertical one:
 - **The MicroPython callback reported a Q16 fraction.** `pos` is in the
   caller's unit, but the binding fell through to the knob/slider branch
   and divided by SURF_ONE, so every `int(pos)` handler saw 0 — all three
-  tulip5 bars snapped to the top when dragged instead of landing where
+  tulip2 bars snapped to the top when dragged instead of landing where
   the thumb was dropped. `.value` was always right, which is what hid it.
 
 ## Capture is per CONTACT
@@ -1560,7 +1560,7 @@ nothing. The image went 7,339,840 -> 6,778,400 bytes.
 
 What was NOT drawn procedurally per value change, and why: the same
 rasteriser through the shape API costs **2.6 ms per knob per change on
-the P4X** (tulip5 measured it) against a frame-index write today, which
+the P4X** (tulip2 measured it) against a frame-index write today, which
 is one dragged knob's worth of frame and ten MIDI-driven knobs' worth of
 dropped frame. Baking keeps the strip and drops the flash; that was the
 whole trade.
@@ -1574,7 +1574,7 @@ it — measured 2244 cells at 19 ms on a P4X, **4.5 ms** batched. Same
 clipping and the same per-cell early-out as `set_cell`, so it damages
 exactly what changed; it is that loop, moved down.
 
-**It only pays for a caller that keeps no shadow of its own.** tulip5
+**It only pays for a caller that keeps no shadow of its own.** tulip2
 has both cases and they came out opposite ways: its console writes and
 forgets, so batching is a straight 4x; its VT terminal keeps a per-cell
 Python shadow it must update either way, and batching there measured
@@ -1606,7 +1606,7 @@ console at 10x is ~500 KB. That is a plain `calloc`, which on a PSRAM board reac
 (IDF's SPIRAM_USE choice defaults to SPIRAM_USE_MALLOC, and allocations
 over SPIRAM_MALLOC_ALWAYSINTERNAL — 16 KB by default — prefer it). It
 returns false rather than trapping if the heap cannot serve it, so a
-caller can fall back (tulip5 tries 10, 4, 2 screens).
+caller can fall back (tulip2 tries 10, 4, 2 screens).
 Enabling it installs the grid's own touch handler, so a node with
 scrollback must not also have `on_touch` set.
 
@@ -1652,9 +1652,9 @@ the block/shade run, arrows, the card suits, the 55 Latin-1 characters
 CP437 happens to carry, and the modern-TUI set (rounded box corners,
 typographic dashes/quotes, check/cross, chevrons, the spinner
 asterisks) that an ssh session running any current terminal program
-lands constantly — added when Claude Code over tulip5's ssh came out as
+lands constantly — added when Claude Code over tulip2's ssh came out as
 rows of `?`. A source face missing some of the TERM set just skips them
-with a warning (DejaVu Sans Mono lacks U+23BF and U+23FA); tulip5's
+with a warning (DejaVu Sans Mono lacks U+23BF and U+23FA); tulip2's
 vt.py substitutes lookalikes for what a face cannot draw. Deliberately
 not the union with Latin-1: a terminal face has no use for the 41
 Latin-1 characters CP437 never had, and a proportional face has none
@@ -1736,7 +1736,7 @@ what is in force **by name** (call it with no argument to just ask; it
 answers `None` after a `Font` object, which has no name to report). It
 applies to widgets built AFTER the call — a button bakes its label node
 at construction — so a host sets it once, early, rather than expecting
-the screen to change under it. tulip5 does exactly that, from its house
+the screen to change under it. tulip2 does exactly that, from its house
 style in `ui.py`.
 
 Early, but **after `surfer.init()`** — see the root-pointer rule below.
@@ -1818,7 +1818,7 @@ overflow its line box.
 
 **There was a 24 and it is the right size for the display ramp**, since
 the faces here run from a 12px line to a 65px one. It came out on flash
-pressure, not on taste: tulip5's P4X app partition is 7 MiB and the
+pressure, not on taste: tulip2's P4X app partition is 7 MiB and the
 image reached 99% of it — 77 KB spare is one font away from a build that
 does not link, and that board's 16 MiB is fully allocated, so growing
 the partition reformats it. Dropping the 24 bought 998 KB back and every

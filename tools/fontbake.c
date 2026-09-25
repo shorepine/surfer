@@ -116,14 +116,14 @@
  * corner) and U+23FA (the record dot -- also in the emoji set, but a
  * terminal wants it one cell wide and tintable, and the face winning
  * over the fallback is what makes that so). A face whose source font
- * lacks some of these just skips them -- the bake warns, and tulip5's
+ * lacks some of these just skips them -- the bake warns, and tulip2's
  * vt.py substitutes a CP437 lookalike for what a face cannot draw. */
 /* ...and the QUADRANT BLOCKS (U+2596..259F), which are what a terminal
  * logo is made of -- Claude Code's own banner is eight of them and the
  * halves. CP437 carries the HALVES (U+2580/2584/258C/2590) and the
  * shades and has no quadrants at all, so a face baked to it draws that
  * banner as a row of '?'. A source face that has not got them is
- * skipped here exactly like the rest of this set, and tulip5's vt.py
+ * skipped here exactly like the rest of this set, and tulip2's vt.py
  * then degrades each to the half-block covering the same edge -- so the
  * ten CP437 ROM faces are unchanged and only a face that really carries
  * them (DejaVu Sans Mono, JetBrains Mono -- both 10/10) draws the real

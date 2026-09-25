@@ -5,7 +5,7 @@
 #
 # v1.x and v3.x silicon CANNOT share a firmware image, and IDF < 5.5.3
 # cannot build for v3.x at all — build this overlay with the v5.5.3
-# toolchain, not the v5.4.1 one the plain board uses. Measured on tulip5's
+# toolchain, not the v5.4.1 one the plain board uses. Measured on tulip2's
 # board (same rev v3.2 part): compose cost at large damaged areas fell
 # 42-51%, far more than the 11% clock bump, because the PPA SRM block /
 # 2D-DMA widened 8x8 -> 32x32. The ~85 us per-op floor is unchanged, so

@@ -558,7 +558,7 @@ static int u8_len(unsigned char b)
  *
  * set_cell is per character, so a terminal repainting a screen of
  * coloured text pays a MicroPython call per cell plus the interpreter
- * loop driving it: measured on tulip5's editor, 2244 cells cost 19 ms of
+ * loop driving it: measured on tulip2's editor, 2244 cells cost 19 ms of
  * a 112 ms page on the P4X, and the Python around it cost more again.
  * This is that loop, moved down. Same clipping and the same per-cell
  * early-out as set_cell, so it damages exactly what changed. */
@@ -1168,7 +1168,7 @@ static void ti_touch(surf_node *n, const surf_touch *t, void *user)
          * branch in the widget rather than one in every caller — and a
          * caller could not make it anyway, since `local_y` needs the
          * node's ABSOLUTE position and Python cannot walk up the tree
-         * to find it. That gap is why tulip5's hand-rolled box had no
+         * to find it. That gap is why tulip2's hand-rolled box had no
          * tap-to-place-the-caret at all. */
         surf_textinput_set_caret(
             n, surf_textinput_index_from_xy(n, (int16_t)(t->x - ax),
@@ -2811,7 +2811,7 @@ static mp_obj_t mod_init(size_t n_args, const mp_obj_t *args)
     /* p4 only, first init only: compose straight into the scan buffer —
      * the right mode for full-screen-every-frame animation */
     bool single = n_args > 2 && mp_obj_is_true(args[2]);
-    /* 4096: real apps blow 512 fast — tulip5's drum machine alone holds
+    /* 4096: real apps blow 512 fast — tulip2's drum machine alone holds
      * ~1100 live nodes (8 channel strips + a 155-row sound chooser) —
      * and 2048 then ran out with SIX ordinary apps open at once, which
      * an OS with a task bar is expected to do. Exhaustion raises

@@ -198,7 +198,7 @@ void surf_textgrid_set_row(surf_node *n, int16_t row, const char *utf8)
          *
          * This is set_row's business and not set_cells'. Here the caller
          * hands over a whole line and tracks no columns; a caller using
-         * set_cells is doing its own column arithmetic (tulip5's console
+         * set_cells is doing its own column arithmetic (tulip2's console
          * and its vt shadow both do) and a hidden extra advance would
          * desync it. */
         if (col < n->u.grid.cols && cell_is_wide(n, (int16_t)(col - 1), row)) {

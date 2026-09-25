@@ -10,7 +10,7 @@
  * horizontally. Float math and malloc are fine here for the same reason
  * they are in image.c: this is bake-time code, not the frame path.
  *
- * ...THAT SAID, tulip5's audioview draws a 256-point trace into an image
+ * ...THAT SAID, tulip2's audioview draws a 256-point trace into an image
  * every frame, and the first version of this rasterizer made that cost
  * 113 ms ON THE DEVICE for one call. Two things were quadratic-ish and
  * neither had to be:

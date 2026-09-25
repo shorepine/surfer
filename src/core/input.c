@@ -191,7 +191,7 @@ void surf_input_dispatch(const surf_touch *t)
                  * does. Without it the next line captures a freed node
                  * and every move after it writes through the pointer.
                  *
-                 * tulip5's launcher found this on Safari, where the
+                 * tulip2's launcher found this on Safari, where the
                  * recycled slot was not benign: a drag of nine pixels
                  * took the whole machine down. */
                 if (ct->capture != c || ct->steal_sv != sv) {
@@ -246,7 +246,7 @@ __attribute__((weak)) int surf_screen_keyboard(int op)
  * Ctrl for a keyboard that has no ctrl key, consumed by the next
  * character. Both are WEAK and zero here — a host that draws no chrome
  * (every desktop, the browser, the panel) links this and nothing
- * changes. tulip5's iOS build defines them strongly in
+ * changes. tulip2's iOS build defines them strongly in
  * drivers/ios_bar.m, which is the only reason they exist. */
 __attribute__((weak)) int surf_host_chrome_q16 = 0;
 __attribute__((weak)) int surf_host_chrome_top_q16 = 0;

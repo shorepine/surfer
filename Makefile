@@ -84,7 +84,7 @@ build/tools/emojibake: tools/emojibake.c tools/stb/stb_image.h
 #
 # There WAS a 24, and it is the right size for the display ramp — the
 # registry gives each face the largest set that fits its line box, so
-# ui23 and up wore a 24 and looked right. It came out because tulip5's
+# ui23 and up wore a 24 and looked right. It came out because tulip2's
 # P4X app partition is 7 MiB and the image reached 99% of it: 77 KB
 # spare is one font away from a build that does not link, and the 16 MiB
 # flash is fully allocated, so growing the partition reformats the

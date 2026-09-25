@@ -2,7 +2,7 @@
  * games (DESIGN.md (input model) / surfer.h). Sources (USB gamepad, i2c stick,
  * keyboard map, touch pad) WRITE; games READ. This file holds only the
  * abstract state — no hardware, no platform. Drivers live above it
- * (in the port / tulip5); the frame path never touches pads. */
+ * (in the port / tulip2); the frame path never touches pads. */
 #include <string.h>
 
 #include "surf_internal.h"

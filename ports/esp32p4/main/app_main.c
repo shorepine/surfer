@@ -49,11 +49,11 @@ static const char *knob_names[6] = {"cutoff", "res", "env", "lfo", "mix", "vol"}
 
 /* Panel reset and backlight are NOT on the BSP's stock pins on our bench
  * board. Stock is GPIO 27 (reset) and 26 (backlight, LEDC PWM), but 26/27
- * are the Full-Speed OTG PHY D-/D+ — the port tulip5 runs USB host on, so
+ * are the Full-Speed OTG PHY D-/D+ — the port tulip2 runs USB host on, so
  * a FS keyboard can enumerate behind a hub without a Transaction
  * Translator. Both signals are therefore jumpered to 4/5 (dupont from the
  * header to the display header, no solder mod); same wiring on both EV
- * boards. Values lifted from tulip5 drivers/port_p4.c, verified there.
+ * boards. Values lifted from tulip2 drivers/port_p4.c, verified there.
  *
  * The BSP hardcodes its pins in the header with no Kconfig override, so
  * we reset and light the panel ourselves and skip
@@ -68,7 +68,7 @@ static const char *knob_names[6] = {"cutoff", "res", "env", "lfo", "mix", "vol"}
 
 static void jumpered_panel_reset(void)
 {
-    /* Active low, tulip5's timings. Safe to do before bsp_display_new:
+    /* Active low, tulip2's timings. Safe to do before bsp_display_new:
      * the panel module has its own supply (the P4's LDO_VO3 feeds
      * VDD_MIPI_DPHY, the SoC PHY — not the panel), so it is already
      * powered and ready to accept a reset pulse at this point. */
