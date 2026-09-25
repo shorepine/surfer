@@ -59,6 +59,10 @@ static struct {
                                  * framebuffer size under SURF_SCALE or
                                  * SURF_NATIVE — mouse events arrive here */
     int           out_w, out_h; /* renderer output (drawable) in real pixels */
+    int           mev_x, mev_y; /* what a mouse event at MEV_PROBE points
+                                 * reads as: MEV_PROBE on real SDL2, the
+                                 * drawable's pixels on sdl2-compat. See
+                                 * calibrate_mouse() */
     SDL_Rect      view;         /* where the fb lands inside the drawable */
     void (*on_interrupt)(void); /* Ctrl-C hook; NULL = ignore the key */
     bool          free_aspect;  /* SURF_FREE_ASPECT: let the window be any shape */
@@ -90,6 +94,63 @@ static struct {
  * round it, and nobody reads that as "not a whole multiple yet". They
  * read it as the view having collapsed. SURF_SCALE=N is there for a
  * guaranteed exact zoom. */
+/* MOUSE EVENTS ARE IN POINTS ON SDL2 AND IN PIXELS ON sdl2-compat, and
+ * nothing in the API says which one this is.
+ *
+ * Real SDL2's renderer installs an event watch that leaves a mouse
+ * event in window points on a HiDPI window. sdl2-compat (SDL3 under an
+ * SDL2 face -- what Homebrew's `sdl2` formula installs now) converts
+ * mouse events to RENDER coordinates instead, which with no logical
+ * size are the drawable's pixels: on a 2x Mac every click arrived at
+ * twice its position, so map_pt scaled it again and a click on the top
+ * left quarter hit the wrong control while the task bar, at y ~570
+ * points, was off the bottom of the screen. Reported as "the mac build
+ * does not accept mouse clicks". Both report version 2.32.x, so the
+ * library cannot be asked; the conversion can be MEASURED. A synthetic
+ * motion event pushed through the queue goes through the same
+ * conversion a real one does, and what comes back is the ratio.
+ * Re-measured whenever the view is, since dragging the window to a
+ * display of another density changes it. Fingers are normalised and
+ * the wheel reads SDL_GetMouseState, which is points on both. */
+#define MEV_PROBE 1000
+#define MEV_MARK  0x5eb1u
+
+static void calibrate_mouse(void)
+{
+    S.mev_x = S.mev_y = MEV_PROBE;
+    SDL_Event e;
+    SDL_zero(e);
+    e.type = SDL_MOUSEMOTION;
+    e.motion.windowID = SDL_GetWindowID(S.win);
+    e.motion.x = MEV_PROBE;
+    e.motion.y = MEV_PROBE;
+    e.motion.state = MEV_MARK;
+    if (SDL_PushEvent(&e) != 1)
+        return;
+    /* take the probe back out, and ONLY the probe: anything else in the
+     * motion queue is a real event and goes back where it was */
+    SDL_Event q[64];
+    int n = SDL_PeepEvents(q, 64, SDL_GETEVENT, SDL_MOUSEMOTION,
+                           SDL_MOUSEMOTION);
+    for (int i = 0; i < n; i++) {
+        if (q[i].motion.state == MEV_MARK) {
+            if (q[i].motion.x > 0 && q[i].motion.y > 0) {
+                S.mev_x = q[i].motion.x;
+                S.mev_y = q[i].motion.y;
+            }
+        } else {
+            SDL_PeepEvents(&q[i], 1, SDL_ADDEVENT, 0, 0);
+        }
+    }
+}
+
+/* a mouse event's coordinates, in window points */
+static void mouse_pt(int ex, int ey, int16_t *x, int16_t *y)
+{
+    *x = (int16_t)(S.mev_x > 0 ? ex * MEV_PROBE / S.mev_x : ex);
+    *y = (int16_t)(S.mev_y > 0 ? ey * MEV_PROBE / S.mev_y : ey);
+}
+
 static void update_view(void)
 {
     int ow = 0, oh = 0;
@@ -196,7 +257,7 @@ static void update_view(void)
     int ww = 0, wh = 0;
     SDL_GetWindowSize(S.win, &ww, &wh);
     S.win_w = (int16_t)ww;
-    S.win_h = (int16_t)wh;
+    S.win_h = (int16_t)wh;    calibrate_mouse();
 }
 
 /* SDL2 has no aspect-ratio constraint — SDL3 added one — so the window
@@ -1371,7 +1432,8 @@ bool surf_hal_sdl_pump(void)
                  * its own copy. Storing window points here was invisible
                  * in a 1:1 window and wrong under SURF_SCALE and on any
                  * window that letterboxes (iOS). */
-                int16_t mx = (int16_t)e.button.x, my = (int16_t)e.button.y;
+                int16_t mx, my;
+                mouse_pt(e.button.x, e.button.y, &mx, &my);
                 push_touch(mx, my, SURF_TOUCH_DOWN, 0);
                 map_pt(&mx, &my);
                 S.mouse_x = mx;
@@ -1382,7 +1444,8 @@ bool surf_hal_sdl_pump(void)
             if (e.motion.which == SDL_TOUCH_MOUSEID)
                 break;
             if (S.mouse_down) {
-                int16_t mx = (int16_t)e.motion.x, my = (int16_t)e.motion.y;
+                int16_t mx, my;
+                mouse_pt(e.motion.x, e.motion.y, &mx, &my);
                 push_touch(mx, my, SURF_TOUCH_MOVE, 0);
                 map_pt(&mx, &my);
                 S.mouse_x = mx;
@@ -1408,7 +1471,9 @@ bool surf_hal_sdl_pump(void)
                 break;
             if (e.button.button == SDL_BUTTON_LEFT) {
                 S.mouse_down = false;
-                push_touch((int16_t)e.button.x, (int16_t)e.button.y, SURF_TOUCH_UP, 0);
+                int16_t ux, uy;
+                mouse_pt(e.button.x, e.button.y, &ux, &uy);
+                push_touch(ux, uy, SURF_TOUCH_UP, 0);
             }
             break;
         }
