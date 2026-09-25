@@ -41,6 +41,9 @@
  * TULIP WORLD is bytes off the network, and an accessor pointing past
  * the buffer must be a load error, not a read. */
 #include <math.h>
+#ifndef M_PI    /* strict C11 on glibc and MinGW hide it; macOS does not */
+#define M_PI 3.14159265358979323846
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

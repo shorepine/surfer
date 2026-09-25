@@ -28,6 +28,9 @@
  * node pool and nothing an image owns, so the cache survives and the
  * second session pays nothing. */
 #include <math.h>
+#ifndef M_PI    /* strict C11 on glibc and MinGW hide it; macOS does not */
+#define M_PI 3.14159265358979323846
+#endif
 #include <stdlib.h>
 #include <string.h>
 

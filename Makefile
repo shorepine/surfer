@@ -15,8 +15,9 @@ WIDGET_SRCS := $(wildcard src/widgets/*.c)
 SDL_SRCS    := $(wildcard src/hal/sdl/*.c)
 HDRS        := include/surfer.h src/core/surf_internal.h src/hal/sdl/hal_sdl.h
 
-SDL_CFLAGS := $(shell sdl2-config --cflags)
-SDL_LIBS   := $(shell sdl2-config --libs)
+SDL_CFLAGS ?= $(shell sdl2-config --cflags)
+SDL_LIBS   ?= $(shell sdl2-config --libs)
+AR         ?= ar
 
 GEN_DIR := build/gen
 
@@ -421,7 +422,7 @@ build/obj/%.o: %.c $(HDRS)
 	$(CC) $(CFLAGS) $(SDL_CFLAGS) -Isrc/core -Isrc/hal/sdl -c $< -o $@
 
 build/libsurfer.a: gen $(LIB_OBJS)
-	ar rcs $@ $(LIB_OBJS)
+	$(AR) rcs $@ $(LIB_OBJS)
 
 gen: $(GEN_DIR)/widget_assets.h $(GEN_DIR)/font_registry.c $(FONTLAB_GEN)
 

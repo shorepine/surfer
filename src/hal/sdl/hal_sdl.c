@@ -1,6 +1,10 @@
 /* SDL2 backend: RGB565 software framebuffer + streaming texture. This file
  * is the only place outside build tools where per-pixel loops are allowed;
  * on device the same ops are PPA/2D-DMA jobs. */
+/* posix_memalign, which strict C11 hides on glibc (macOS shows it anyway) */
+#if !defined(_POSIX_C_SOURCE) && !defined(_WIN32)
+#define _POSIX_C_SOURCE 200112L
+#endif
 #include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -664,15 +668,24 @@ static void h_band_shift(surf_rect r, int16_t sx, int16_t sy)
 
 static void *h_alloc_image(size_t bytes)
 {
+#ifdef _WIN32
+    /* Windows has no posix_memalign; _aligned_malloc wants _aligned_free */
+    return _aligned_malloc((bytes + 63) & ~(size_t)63, 64);
+#else
     void *p = NULL;
     if (posix_memalign(&p, 64, (bytes + 63) & ~(size_t)63) != 0)
         return NULL;
     return p;
+#endif
 }
 
 static void h_free_image(void *p)
 {
+#ifdef _WIN32
+    _aligned_free(p);
+#else
     free(p);
+#endif
 }
 
 static const surf_hal hal_sdl = {

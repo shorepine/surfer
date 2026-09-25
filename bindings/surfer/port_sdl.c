@@ -1,6 +1,8 @@
 /* Desktop (unix port) platform glue: SDL hal + SDL keyboard + gamepad. */
 #include <string.h>
-#ifndef __EMSCRIPTEN__
+#if defined(_WIN32)
+#include <windows.h>
+#elif !defined(__EMSCRIPTEN__)
 #include <sys/resource.h>
 #include <sys/time.h>
 #endif
@@ -119,7 +121,29 @@ bool surfer_port_pump(void)
  * story for a windowed process); web has neither */
 int surfer_port_cpu_usage(float *pct, int max)
 {
-#ifndef __EMSCRIPTEN__
+#if defined(_WIN32)
+    /* the same number from GetProcessTimes (100 ns units) */
+    if (max < 1)
+        return 0;
+    static int64_t last_cpu, last_wall;
+    FILETIME c, e, k, u, now;
+    if (!GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u))
+        return 0;
+    GetSystemTimeAsFileTime(&now);
+    int64_t cpu = (int64_t)(((uint64_t)k.dwHighDateTime << 32) | k.dwLowDateTime) +
+                  (int64_t)(((uint64_t)u.dwHighDateTime << 32) | u.dwLowDateTime);
+    int64_t wall = (int64_t)(((uint64_t)now.dwHighDateTime << 32) | now.dwLowDateTime);
+    int64_t dc = cpu - last_cpu, dw = wall - last_wall;
+    last_cpu = cpu;
+    last_wall = wall;
+    if (dw <= 0)
+        return 0;
+    float busy = 100.0f * (float)dc / (float)dw;
+    if (busy < 0.0f) busy = 0.0f;
+    if (busy > 100.0f) busy = 100.0f;
+    pct[0] = busy;
+    return 1;
+#elif !defined(__EMSCRIPTEN__)
     if (max < 1)
         return 0;
     static int64_t last_cpu_us, last_wall_us;

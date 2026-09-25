@@ -25,6 +25,10 @@ CFLAGS_USERMOD += -sUSE_SDL=2 -std=gnu11 -Wno-error
 # and an archive must come after the objects that pull symbols from it
 JSFLAGS += $(SURFER_DIR)/build/libsurfer-web.a
 else
-CFLAGS_USERMOD += $(shell sdl2-config --cflags)
-LDFLAGS_USERMOD += $(SURFER_DIR)/build/libsurfer.a $(shell sdl2-config --libs)
+# A host can name SDL itself (a cross build, where sdl2-config is the
+# build machine's and not the target's): SURFER_SDL_CFLAGS / _LIBS.
+SURFER_SDL_CFLAGS ?= $(shell sdl2-config --cflags)
+SURFER_SDL_LIBS ?= $(shell sdl2-config --libs)
+CFLAGS_USERMOD += $(SURFER_SDL_CFLAGS)
+LDFLAGS_USERMOD += $(SURFER_DIR)/build/libsurfer.a $(SURFER_SDL_LIBS)
 endif
