@@ -360,6 +360,85 @@ static void test_dropdown(void)
     surf_dropdown_destroy(d);
 }
 
+
+/* A list longer than the screen SCROLLS inside a popup that fits, and a
+ * drag through it scrolls rather than picking whatever it crossed. It
+ * used to draw full length straight down, off the bottom of the screen. */
+/* drag() with the mock's op log cleared every tick: a scrolling list of
+ * thirty rows records more ops than the log holds */
+static void tick0(void) { nops = 0; surf_tick(); }
+static void drag0(int16_t x0, int16_t y0, int16_t x1, int16_t y1, int steps)
+{
+    mock_push_touch((surf_touch){x0, y0, SURF_TOUCH_DOWN, 0});
+    tick0();
+    for (int i = 1; i <= steps; i++) {
+        mock_push_touch((surf_touch){
+            (int16_t)(x0 + (x1 - x0) * i / steps),
+            (int16_t)(y0 + (y1 - y0) * i / steps), SURF_TOUCH_MOVE, 0});
+        tick0();
+    }
+    mock_push_touch((surf_touch){x1, y1, SURF_TOUCH_UP, 0});
+    tick0();
+}
+
+static void test_dropdown_long(void)
+{
+    fresh(400, 300, 256);
+    static surf_image panel = {
+        .pixels = (void *)&panel, .w = 24, .h = 24, .stride = 96,
+        .format = SURF_FMT_ARGB8888,
+    };
+    static const char *items[30];
+    static char names[30][4];
+    for (int i = 0; i < 30; i++) {
+        names[i][0] = 'A'; names[i][1] = (char)('A' + i % 26); names[i][2] = 0;
+        items[i] = names[i];
+    }
+    surf_dropdown_style st = {
+        .panel = &panel, .inset = 8, .font = &tfont,
+        .text_color = 1, .hi_color = 2,
+    };
+    OK(surf_node_size(surf_screen()).y == 300);
+
+    /* near the top: opens below, clamped to the screen (item_h 22, popup
+     * at y 44, rows from 50 down to 292, 30 x 22 = 660 of content) */
+    surf_dropdown *d = surf_dropdown_new(surf_screen(), 50, 20, 120, &st, items, 30);
+    surf_dropdown_on_change(d, test_dd_cb, NULL);
+    tick0();
+    drag0(60, 30, 60, 30, 1);
+    tick0();
+    OK(surf_hit_test(60, 285) != NULL);               /* rows reach the bottom */
+    dd_got = -1;
+    drag0(60, 285, 60, 285, 1);                       /* ...and are live there */
+    OK(dd_got == 10);                                 /* (285 - 50) / 22 */
+    drag0(60, 30, 60, 30, 1);                         /* open it again */
+    tick0();
+
+    /* a drag scrolls and picks nothing */
+    dd_got = -1;
+    drag0(60, 250, 60, 150, 10);
+    OK(dd_got == -1);
+    for (int i = 0; i < 120; i++) tick0();        /* let momentum settle */
+
+    /* ...and a tap after it picks the row that is THERE now, not row 2 */
+    dd_got = -1;
+    drag0(60, 100, 60, 100, 1);
+    OK(dd_got > 2);
+    surf_dropdown_destroy(d);
+
+    /* near the bottom: there is more room above, so it opens UP */
+    fresh(400, 300, 256);
+    d = surf_dropdown_new(surf_screen(), 50, 260, 120, &st, items, 30);
+    surf_dropdown_on_change(d, test_dd_cb, NULL);
+    tick0();
+    drag0(60, 270, 60, 270, 1);
+    tick0();
+    dd_got = -1;
+    drag0(60, 30, 60, 30, 1);                          /* a row up top */
+    OK(dd_got >= 0);
+    surf_dropdown_destroy(d);
+}
+
 /* A wheel scrolls the scrollview under it, and what no scrollview takes
  * is QUEUED for the application. The second half is what makes a wheel
  * mean something other than scrolling — zooming a picture, stepping a
@@ -416,4 +495,5 @@ void run_scroll_tests(void)
     test_overscroll_spring();
     test_checkbox();
     test_dropdown();
+    test_dropdown_long();
 }

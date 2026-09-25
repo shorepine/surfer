@@ -106,6 +106,15 @@ bool surf_init(const surf_hal *hal, int16_t w, int16_t h, const surf_config *cfg
         node_free(&surf_g.pool[i]);
 
     surf_g.root = node_alloc(SURF_NODE_GROUP);
+    /* the screen's SIZE, with no clip flag: clipping and hit testing key
+     * on SURF_NF_CLIP and a handler, so this changes neither -- it only
+     * lets surf_node_size(surf_screen()) answer, which a widget placing
+     * a popup (the dropdown) needs and cannot get any other way through
+     * the public API */
+    if (surf_g.root) {
+        surf_g.root->w = w;
+        surf_g.root->h = h;
+    }
     surf_pad_reset_all();
     surf_key_reset();
     surf_wheel_reset();

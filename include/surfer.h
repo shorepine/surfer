@@ -326,7 +326,7 @@ typedef struct {
 /* lifecycle */
 bool       surf_init(const surf_hal *hal, int16_t w, int16_t h, const surf_config *cfg);
 void       surf_deinit(void);
-surf_node *surf_screen(void);
+surf_node *surf_screen(void);  /* surf_node_size() of it is the screen */
 void       surf_tick(void);  /* compose dirty rects + present */
 /* current multitouch contacts (0 when the hal has no multi support) */
 int        surf_touch_points(surf_touch_pt *out, int max);
