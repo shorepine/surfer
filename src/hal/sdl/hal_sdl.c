@@ -844,6 +844,15 @@ const surf_hal *surf_hal_sdl_init(int16_t w, int16_t h, const char *title)
      * ASYNCIFY, which aborts the synchronous VM calls. */
     SDL_SetHint(SDL_HINT_EMSCRIPTEN_ASYNCIFY, "0");
 #endif
+    /* SDL disables the screensaver when it makes a window, which on macOS
+     * is a PreventUserIdleDisplaySleep assertion held for as long as the
+     * window lives: a surfer app left open overnight kept every display
+     * on. A UI that is not playing video should let the screen sleep;
+     * one that needs it awake can call SDL_DisableScreenSaver itself.
+     * Set as a DEFAULT hint, so SDL_VIDEO_ALLOW_SCREENSAVER=0 in the
+     * environment still wins. */
+    SDL_SetHintWithPriority(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1",
+                            SDL_HINT_DEFAULT);
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0)
         return NULL;
     S.w = w;
